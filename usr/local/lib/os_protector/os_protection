@@ -1,0 +1,55 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          os_protection
+# Required-Start:    
+# Required-Stop:     
+# Should-Start:      
+# Should-Stop:       
+# Default-Start:     2 3 4 5
+# Default-Stop:
+# Short-Description: OS protection service daemon
+# Description:       OS protection service protects the OS kernel and drivers.
+### END INIT INFO
+
+set -e
+
+OS_PROTECTOR="/usr/local/lib/os_protector/os_protector"
+PRELOAD_MODULE="/usr/local/lib/os_protector/preload_module"
+DAEMON="/usr/local/lib/os_protector/os_protection"
+
+# Check for daemon presence
+#[ -x "$OS_PROTECTOR"" ] || exit 0
+
+OPTIONS=""
+MODULES=""
+
+# Get lsb functions
+. /lib/lsb/init-functions
+
+# OS 보호 서비스
+case "$1" in
+	start)
+		log_daemon_msg "Starting OS protection service" "OS Protection"
+		$PRELOAD_MODULE
+		$OS_PROTECTOR
+	;;
+	stop)
+		log_daemon_msg "Cannot stop OS protection service" "OS Protection"
+	;;
+	enable-autostart)
+		log_action_msg "Enabling autostart" "OS Protection"
+		update-rc.d os_protection remove
+		cp $DAEMON /etc/init.d/
+		update-rc.d os_protection defaults
+	;;	
+	disable-autostart)
+		log_action_msg "Disabling autostart" "OS Protection"
+		update-rc.d os_protection remove
+	;;
+	*)
+		log_action_msg "Usage: /etc/init.d/os_protection {start|stop|enable-autostart|disable-autostart}"
+		exit 1
+	;;
+esac
+
+exit 0

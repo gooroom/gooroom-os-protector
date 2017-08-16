@@ -1,0 +1,7 @@
+#!/bin/bash
+# Enable interrupt remapping
+sed -i 's/intremap=off //g' /etc/default/grub
+update-grub
+
+# Enable hibernate and suspend function in systemd config to support notebook
+sed -i 's/HandleSuspendKey=ignore/#HandleSuspendKey=suspend/; s/HandleHibernateKey=ignore/#HandleHibernateKey=hibernate/; s/HandleLidSwitch=ignore/#HandleLidSwitch=suspend/' /etc/systemd/logind.conf

@@ -1,0 +1,6 @@
+#!/bin/sh
+
+# Describe preload modules for protection
+modprobe ip_tables
+modprobe iptable_filter
+modprobe xt_owner

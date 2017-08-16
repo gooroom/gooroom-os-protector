@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# Install daemon
+cp /usr/local/lib/os_protector/os_protection /etc/init.d/
+update-rc.d os_protection defaults
+
+# Disable interrupt remapping to reserve IOMMU
+if [ $(cat /etc/default/grub | grep 'intremap=off' > /dev/null; echo $?) -eq 1 ]; then
+  sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=\"/GRUB_CMDLINE_LINUX_DEFAULT=\"intremap=off /' /etc/default/grub
+  update-grub
+fi
+
+# Disable hibernate and suspend function in systemd config to support notebook
+sed -i 's/#HandleSuspendKey=suspend/HandleSuspendKey=ignore/; s/#HandleHibernateKey=hibernate/HandleHibernateKey=ignore/; s/#HandleLidSwitch=suspend/HandleLidSwitch=ignore/' /etc/systemd/logind.conf

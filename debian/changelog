@@ -1,0 +1,12 @@
+os-protector (1.8.0+4.9.30-2+deb9u2+grm1) UNRELEASED; urgency=medium
+
+  * Rebuild 4.9.30-2+deb9u2+grm1
+
+ -- gooroom <gooroom@gooroom.kr>  Fri, 04 Aug 2017 11:55:54 +0900
+
+os-protector (1.8.0) stable; urgency=medium
+
+  * Initial Release
+
+ -- gooroom <gooroom@gooroom.kr>  Tue, 01 Aug 2017 19:47:12 +0900
+
