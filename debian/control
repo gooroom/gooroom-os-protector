@@ -1,13 +1,13 @@
-Source: os-protector
+Source: gooroom-os-protector
 Section: admin
 Priority: optional
 Maintainer: gooroom <gooroom@gooroom.kr>
 Build-Depends: debhelper (>= 9), dkms, nasm, python
 Standards-Version: 3.9.6
 
-Package: os-protector
+Package: gooroom-os-protector
 Architecture: amd64
 Depends: ${misc:Depends}
-Description: OS Protector
- OS Protector protects the Gooroom kernel and drivers.
+Description: Gooroom OS Protector
+ Gooroom OS Protector protects the Gooroom kernel and drivers.
  It supports Gooroom kernel version from 3.x.x to 4.x.x.

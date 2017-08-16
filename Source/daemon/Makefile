@@ -1,11 +1,11 @@
 #
-# Makefile for OS protector daemon.
+# Makefile for Loader of Gooroom OS Protector.
 #
-all: os_protector
+all: gop-helper
 
 clean: 
 	rm -f *.o
-	rm -f os_protector
+	rm -f gop-helper
 
-os_protector: os_protector.c
-	gcc -o os_protector os_protector.c
+gop-helper: gop-helper.c
+	gcc -o gop-helper gop-helper.c

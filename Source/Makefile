@@ -11,7 +11,7 @@ shadow_box_module:
 	cd shadow_box
 	cp /boot/System.map-`uname -r` "system.map/`uname -v`.map"
 	make -j
-	cp shadow_box.ko ../../usr/local/lib/os_protector
+	cp shadow_box.ko ../../usr/share/gooroom/security/os-protector
 	cd ..
 
 shadow_box_helper_module:
@@ -21,7 +21,7 @@ shadow_box_helper_module:
 	@echo ==================================
 	cd shadow_box_helper
 	make -j
-	cp shadow_box_helper.ko ../../usr/local/lib/os_protector
+	cp shadow_box_helper.ko ../../usr/share/gooroom/security/os-protector
 	cd ..
 
 os_protector_daemon:
@@ -31,9 +31,8 @@ os_protector_daemon:
 	@echo ==================================
 	cd daemon
 	make -j
-	cp os_protector ../../usr/local/lib/os_protector
+	cp gop-helper ../../usr/share/gooroom/security/os-protector
 	cd ..
-#cp daemon/os_protector ../../usr/local/lib/os_protector
 
 clean:
 	make -C shadow_box clean

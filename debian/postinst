@@ -1,13 +1,15 @@
 #!/bin/bash
 
 # Install daemon
-cp /usr/local/lib/os_protector/os_protection /etc/init.d/
-update-rc.d os_protection defaults
+cp /usr/share/gooroom/security/os-protector/gop-daemon /etc/init.d/
+update-rc.d gop-daemon defaults
 
-# Disable interrupt remapping to reserve IOMMU
-if [ $(cat /etc/default/grub | grep 'intremap=off' > /dev/null; echo $?) -eq 1 ]; then
-  sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=\"/GRUB_CMDLINE_LINUX_DEFAULT=\"intremap=off /' /etc/default/grub
-  update-grub
+# Disable interrupt remapping to reserve IOMMU if Gooroom Boot Protector is not installed
+service gbp-daemon status > /dev/null
+ret=$?
+if [ \( $ret -ne 0 \) -a \( $ret -ne 3 \) ]; then
+	sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=\"/GRUB_CMDLINE_LINUX_DEFAULT=\"intremap=off /' /etc/default/grub
+	update-grub
 fi
 
 # Disable hibernate and suspend function in systemd config to support notebook

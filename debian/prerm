@@ -1,5 +1,5 @@
 #!/bin/bash
 
 # Uninstall daemon
-update-rc.d os_protection remove
-rm /etc/init.d/os_protection
+update-rc.d gop-daemon remove
+rm /etc/init.d/gop-daemon

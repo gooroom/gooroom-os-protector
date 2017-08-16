@@ -1,0 +1,82 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          gop-daemon
+# Required-Start:    
+# Required-Stop:     
+# Should-Start:      
+# Should-Stop:       
+# Default-Start:     2 3 4 5
+# Default-Stop:
+# Short-Description: Gooroom OS Protector service
+# Description:       Gooroom OS Protector protects the OS kernel and drivers.
+### END INIT INFO
+
+set -e
+
+GOP_HELPER_PATH="/usr/share/gooroom/security/os-protector/gop-helper"
+PRELOAD_MODULE="/usr/share/gooroom/security/os-protector/preload_module"
+SERVICE_NAME="gop-daemon"
+SERVICE_PATH="/usr/share/gooroom/security/os-protector/$SERVICE_NAME"
+MAIN_DRIVER_PATH="/usr/share/gooroom/security/os-protector/shadow_box.ko"
+HELPER_DRIVER_PATH="/usr/share/gooroom/security/os-protector/shadow_box_helper.ko"
+TAG_NAME="GOP"
+
+# Check for daemon presence
+#[ -x "$GOP_HELPER_PATH" ] || exit 0
+
+OPTIONS=""
+MODULES=""
+
+# Get lsb functions
+. /lib/lsb/init-functions
+ret_value_of_check=
+
+check() {
+	if [ \( -f $MAIN_DRIVER_PATH \) -a \( -f $HELPER_DRIVER_PATH \) -a \( -f $GOP_HELPER_PATH \) ]; then
+		log_action_msg "$TAG_NAME:" "$SERVICE_NAME active"
+		ret_value_of_check="0"
+	else
+		log_action_msg "$TAG_NAME:" "$SERVICE_NAME inactive"
+		ret_value_of_check="-1"
+	fi
+}
+	
+# OS 보호 서비스
+case "$1" in
+	start)
+		log_daemon_msg "$TAG_NAME" "Start Gooroom OS Protector service" 
+		log_end_msg 0
+		logger --id=$$ -p 3 -t $SERVICE_NAME "$TAG_NAME: errorcode=$ret_value_of_check"
+		$PRELOAD_MODULE
+		$GOP_HELPER_PATH
+	;;
+
+	stop)
+		log_daemon_msg "$TAG_NAME" "Stop Gooroom OS Protector service"
+		log_end_msg 0
+		logger --id=$$ -p 3 -t $SERVICE_NAME "$TAG_NAME: errorcode=1"
+	;;
+
+	enable-autostart)
+		log_action_msg "$TAG_NAME" "Enabling autostart" 
+		update-rc.d $SERVICE_NAME remove
+		cp $SERVICE_PATH /etc/init.d/
+		update-rc.d $SERVICE_NAME defaults
+	;;	
+
+	disable-autostart)
+		log_action_msg "$TAG_NAME" "Disabling autostart" 
+		update-rc.d os_protection remove
+	;;
+
+	check)
+		check
+	;;
+	
+	*)
+		log_action_msg "Usage: /etc/init.d/os_protection {start|stop|enable-autostart|disable-autostart}"
+		exit 1
+	;;
+esac
+
+exit 0

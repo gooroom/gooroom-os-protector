@@ -76,7 +76,8 @@ u64 g_stack_size = MAX_STACK_SIZE;
 u64 g_vm_host_phy_pml4 = 0;
 u64 g_vm_init_phy_pml4 = 0;
 struct module* g_shadow_box_module = NULL;
-static int g_support_SMX = 0;
+static int g_support_smx = 0;
+static int g_support_xsave = 0;
 
 atomic_t g_need_init_in_secure = {1};
 volatile int g_allow_shadow_box_hide = 0;
@@ -270,11 +271,24 @@ static int __init shadow_box_init(void)
 	if (ecx & CPUID_1_ECX_SMX)
 	{
 		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] SMX support\n");
-		g_support_SMX = 1;
+		g_support_smx = 1;
 	}
 	else
 	{
 		sb_printf(LOG_LEVEL_DETAIL, LOG_ERROR "    [*] SMX not support\n");
+	}
+
+	/* Check XSAVES, XRSTORS support. */
+	cpuid_count(0x0D, 1, &eax, &ebx, &ecx, &edx);
+
+	if (eax & CPUID_D_EAX_XSAVES)
+	{
+		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] XSAVES/XRSTORES support\n");
+		g_support_xsave = 1;
+	}
+	else
+	{
+		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] XSAVES/XRSTORES not support\n");
 	}
 
 #if SHADOWBOX_USE_SHUTDOWN
@@ -2522,7 +2536,7 @@ static int sb_init_vmx(int cpu_id)
 	u64 value;
 	int result;
 
-	if (g_support_SMX)
+	if (g_support_smx)
 	{
 		// To handle the SMXE exception.
 		cr4 = sb_get_cr4();
@@ -4144,6 +4158,17 @@ static void sb_setup_vm_control_register(struct sb_vm_control_register*
 		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] Support Enable INVPCID\n",
 			cpu_id);
 		sec_flags |= VM_BIT_VM_SEC_PROC_CTRL_ENABLE_INVPCID;
+	}
+
+	if (g_support_xsave == 1)
+	{
+		if ((sb_rdmsr(MSR_IA32_VMX_PROCBASED_CTLS2) >> 32) &
+			VM_BIT_VM_SEC_PROC_CTRL_ENABLE_XSAVE)
+		{
+			sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] Support Enable XSAVE\n",
+				cpu_id);
+			sec_flags |= VM_BIT_VM_SEC_PROC_CTRL_ENABLE_XSAVE;
+		}
 	}
 
 #if SHADOWBOX_USE_PRE_TIMER

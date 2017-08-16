@@ -29,7 +29,7 @@
  */
 #define SHADOWBOX_USE_IOMMU				1
 /* If you want to use tboot, turn on this feature. */
-#define SHADOWBOX_USE_TBOOT				0
+#define SHADOWBOX_USE_TBOOT				1
 /*
  * Kernel patch workaround is experimental feature. If you want to use code
  * patch workaround, turn on this feature.
@@ -346,6 +346,7 @@
 #define VM_BIT_VM_SEC_PROC_CTRL_DESC_TABLE		(0x01 << 2)
 #define VM_BIT_VM_SEC_PROC_CTRL_UNREST_GUEST	(0x01 << 7)
 #define VM_BIT_VM_SEC_PROC_CTRL_ENABLE_INVPCID  (0x01 << 12)
+#define VM_BIT_VM_SEC_PROC_CTRL_ENABLE_XSAVE  	(0x01 << 20)
 
 /* MISC flags. */
 #define VM_BIT_VM_MISC_SAVE_LMA_TO_VMCS			(0x01 << 5)
@@ -509,6 +510,8 @@
 /* CPUID flags. */
 #define CPUID_1_ECX_VMX							((u64)0x01 << 5)
 #define CPUID_1_ECX_SMX							((u64)0x01 << 6)
+#define CPUID_1_ECX_XSAVE						((u64)0x01 << 26)
+#define CPUID_D_EAX_XSAVES						((u64)0x01 << 3)
 
 /* RFLAGS register flags. */
 //=========================================================
@@ -774,6 +777,7 @@ extern struct file* g_udp6_file_ptr;
 extern struct socket* g_tcp_sock;
 extern struct socket* g_udp_sock;
 extern rwlock_t* g_tasklist_lock;
+extern atomic_t g_need_init_in_secure;
 extern volatile int g_allow_shadow_box_hide;
 
 /*
