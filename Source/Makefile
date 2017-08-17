@@ -9,6 +9,7 @@ shadow_box_module:
 	@echo Build Shadow-Box Module...
 	@echo ==================================
 	cd shadow_box
+	if [ ! -d "system.map" ]; then mkdir system.map; fi
 	cp /boot/System.map-`uname -r` "system.map/`uname -v`.map"
 	make -j
 	cp shadow_box.ko ../../usr/share/gooroom/security/os-protector

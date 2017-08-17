@@ -21,8 +21,6 @@ symbol_table_array = []
 # Search system.map directory and make tables. 
 def make_symbol_table_in_directory():
 	filelist = glob.glob("system.map/*")
-	if len(filelist) == 0:
-		os.system("mkdir system.map")
 
 	# Extract kernel version
 	for item in filelist:
