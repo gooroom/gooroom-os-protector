@@ -4,14 +4,19 @@ export DEB_CFLAGS_SET=-O2
 
 DHFLAGS=--parallel
 
-#KVERSION=$(shell uname -r)
-# uname -r
 UNAME_R=4.9.0-3-amd64
-# uname -v
-UNAME_V=\#1 SMP gooroom 4.9.30-2+deb9u2+grm1 (2017-07-04)
+UNAME_V=\#1 SMP gooroom 4.9.30-2+deb9u3+grm1u1 (2017-08-17)
 
 %:
 	dh $@ --with dkms $(DHFLAGS)
+
+override_dh_auto_clean:
+	dh_auto_clean
+
+	sed -i -e 's@`uname -r`@${UNAME_R}@g' $(CURDIR)/Source/Makefile
+	sed -i -e 's@`uname -v`@${UNAME_V}@g' $(CURDIR)/Source/Makefile
+	sed -i -e 's@KVERSION =.*@KVERSION = ${UNAME_R}@g' $(CURDIR)/Source/shadow_box/Makefile
+	sed -i -e 's@KVERSION =.*@KVERSION = ${UNAME_R}@g' $(CURDIR)/Source/shadow_box_helper/Makefile
 
 override_dh_auto_configure:
 	dh_auto_configure
@@ -22,7 +27,6 @@ override_dh_auto_configure:
 	sed -i -e 's@KVERSION =.*@KVERSION = ${UNAME_R}@g' $(CURDIR)/Source/shadow_box_helper/Makefile
 
 override_dh_install:
-#make -C Source -f Makefile.pkg make_package_dir
 	make -C Source
 	dh_install --fail-missing
 
@@ -30,7 +34,6 @@ override_dh_builddeb:
 	dh_builddeb -- -Zxz -z9
 
 override_dh_clean:
-#make -i -C Source -f Makefile.pkg remove_package_dir
 	make -C Source clean
 	dh_clean
 

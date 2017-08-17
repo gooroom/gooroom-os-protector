@@ -80,16 +80,14 @@
 #define MASK_GDT_ACCESS					((u64)0x03)
 
 #if SHADOWBOX_HARD_TEST
-/* 1000 milisecond. */
-#define TIMER_INTERVAL 1000000
+/* 1 milisecond. */
+#define TIMER_INTERVAL 1000
 #else
 /* 1 microsecond	: 1
  * 1 milisecond		: 1000
  * 1 Second			: 1000000
  */
-//#define TIMER_INTERVAL 	100000
-#define TIMER_INTERVAL 	100
-
+#define TIMER_INTERVAL 	100000
 #endif /* SHADOWBOX_HARD_TEST */
 
 #define VM_PRE_TIMER_VALUE	((u64)tsc_khz * 1024 * TIMER_INTERVAL / 1000000)
