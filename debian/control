@@ -2,7 +2,8 @@ Source: gooroom-os-protector
 Section: admin
 Priority: optional
 Maintainer: gooroom <gooroom@gooroom.kr>
-Build-Depends: debhelper (>= 9), dkms, nasm, python
+Build-Depends: debhelper (>= 9), dkms, nasm, python,
+ linux-image-4.9.0-3-amd64, linux-headers-4.9.0-3-amd64
 Standards-Version: 3.9.6
 
 Package: gooroom-os-protector

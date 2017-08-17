@@ -16,9 +16,6 @@ UNAME_V=\#1 SMP gooroom 4.9.30-2+deb9u2+grm1 (2017-07-04)
 override_dh_auto_configure:
 	dh_auto_configure
 
-	apt install -y --force-yes linux-image-${UNAME_R} linux-headers-${UNAME_R}
-	#cp /boot/System.map-${UNAME_R} "$(CURDIR)/Source/shadow_box/system.map/${UNAME_V}.map"
-
 	sed -i -e 's@`uname -r`@${UNAME_R}@g' $(CURDIR)/Source/Makefile
 	sed -i -e 's@`uname -v`@${UNAME_V}@g' $(CURDIR)/Source/Makefile
 	sed -i -e 's@KVERSION =.*@KVERSION = ${UNAME_R}@g' $(CURDIR)/Source/shadow_box/Makefile
