@@ -3571,8 +3571,8 @@ void sb_insert_exception_to_vm(void)
 	u64 info_field;
 	sb_read_vmcs(VM_CTRL_VM_ENTRY_INT_INFO_FIELD, &info_field);
 
-	info_field |= VM_BIT_VM_ENTRY_INT_INFO_GP;
-	//info_field |= VM_BIT_VM_ENTRY_INT_INFO_UD;
+	//info_field = VM_BIT_VM_ENTRY_INT_INFO_GP;
+	info_field = VM_BIT_VM_ENTRY_INT_INFO_UD;
 
 	sb_write_vmcs(VM_CTRL_VM_ENTRY_INT_INFO_FIELD, info_field);
 	sb_write_vmcs(VM_CTRL_VM_ENTRY_EXCEPT_ERR_CODE, 0);
@@ -3727,6 +3727,7 @@ static void sb_vm_exit_callback_ept_violation(int cpu_id, struct sb_vm_exit_gues
 	guest_context, u64 exit_reason, u64 exit_qual, u64 guest_linear, u64 guest_physical)
 {
 	u64 log_addr;
+	u64 cr0;
 
 	sb_printf(LOG_LEVEL_NONE, LOG_ERROR "VM [%d] Memory attack is detected, "
 		"guest linear=%016lX guest physical=%016X virt_to_phys=%016lX\n",
@@ -3746,6 +3747,14 @@ static void sb_vm_exit_callback_ept_violation(int cpu_id, struct sb_vm_exit_gues
 		{
 			/* Insert exception to the guest */
 			sb_insert_exception_to_vm();
+			sb_read_vmcs(VM_GUEST_CR0, &cr0);
+
+			/* If malware turns WP bit off, recover it again */
+			if ((cr0 & CR0_BIT_PG) && !(cr0 & CR0_BIT_WP))
+			{
+				sb_write_vmcs(VM_GUEST_CR0, cr0 | CR0_BIT_WP);
+			}
+
 			sb_error_log(ERROR_KERNEL_MODIFICATION);
 		}
 	}

@@ -360,7 +360,7 @@
 #define VM_BIT_VM_ENTRY_INT_INFO_OTHER			(0x7 << 8)
 #define VM_BIT_VM_ENTRY_INT_INFO_ERROR_CODE		(0x01 << 11)
 #define VM_BIT_VM_ENTRY_INT_INFO_VALID			(0x01 << 31)
-#define VM_BIT_VM_ENTRY_INT_INFO_UD				(0 | VM_BIT_VM_ENTRY_INT_INFO_HW |\
+#define VM_BIT_VM_ENTRY_INT_INFO_UD				(6 | VM_BIT_VM_ENTRY_INT_INFO_HW |\
 	VM_BIT_VM_ENTRY_INT_INFO_VALID)
 #define VM_BIT_VM_ENTRY_INT_INFO_GP				(13 | VM_BIT_VM_ENTRY_INT_INFO_HW | \
 	VM_BIT_VM_ENTRY_INT_INFO_ERROR_CODE | VM_BIT_VM_ENTRY_INT_INFO_VALID)
@@ -521,8 +521,10 @@
 #define EFER_BIT_LME							(0x01 << 8)
 
 /* CR0 Flags. */
+#define CR0_BIT_WP								((u64)0x01 << 16)
 #define CR0_BIT_NW								((u64)0x01 << 29)
 #define CR0_BIT_CD								((u64)0x01 << 30)
+#define CR0_BIT_PG								((u64)0x01 << 31)
 
 /* CR3 Flags. */
 #define CR3_BIT_PCD								((u64)0x01 << 4)
