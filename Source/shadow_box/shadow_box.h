@@ -119,6 +119,9 @@
  * Some macros are disabled because of name conflict in Linux header.
  */
 /* #define MSR_IA32_FEATURE_CONTROL			0x3A */
+#define MSR_IA32_FEATURE_CONTROL_BIT_CONTROL_LOCKED					(0x01 << 0)
+#define MSR_IA32_FEATURE_CONTROL_BIT_VMXON_ENABLED_INSIDE_SMX		(0x01 << 1)
+#define MSR_IA32_FEATURE_CONTROL_BIT_VMXON_ENABLED_OUTPUTSIDE_SMX	(0x01 << 2)
 /* #define MSR_IA32_SYSENTER_CS				0x174 */
 /* #define MSR_IA32_SYSENTER_ESP			0x175 */
 /* #define MSR_IA32_SYSENTER_EIP			0x176 */

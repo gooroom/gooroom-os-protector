@@ -232,6 +232,7 @@ static int __init shadow_box_init(void)
 	struct new_utsname* name;
 	struct kfifo* fifo;
 	u32 eax, ebx, ecx, edx;
+	u64 msr;
 
 	sb_print_shadow_box_logo();
 
@@ -276,6 +277,28 @@ static int __init shadow_box_init(void)
 	else
 	{
 		sb_printf(LOG_LEVEL_DETAIL, LOG_ERROR "    [*] SMX not support\n");
+	}
+
+	/* Check BIOS locked feature. */
+	msr = sb_rdmsr(MSR_IA32_FEATURE_CONTROL);
+	if (msr & MSR_IA32_FEATURE_CONTROL_BIT_CONTROL_LOCKED)
+	{
+		if (!(msr & MSR_IA32_FEATURE_CONTROL_BIT_VMXON_ENABLED_OUTPUTSIDE_SMX))
+		{
+			sb_printf(LOG_LEVEL_NONE, LOG_ERROR "    [*] VMX is disabled by BIOS\n");
+			sb_error_log(ERROR_HW_NOT_SUPPORT);
+			return -1;
+		}
+
+#if SHADOWBOX_USE_TBOOT
+		if ((tboot_enabled()) && !(msr & MSR_IA32_FEATURE_CONTROL_BIT_VMXON_ENABLED_INSIDE_SMX))
+		{
+			sb_printf(LOG_LEVEL_NONE, LOG_ERROR "    [*] VMX inside SMX is disabled by BIOS\n");
+			sb_error_log(ERROR_HW_NOT_SUPPORT);
+			return -1;
+		}
+#endif
+
 	}
 
 	/* Check XSAVES, XRSTORS support. */
@@ -474,12 +497,6 @@ static int __init shadow_box_init(void)
 		sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "Execution Fail\n");
 		return -1;
 	}
-
-	/* Hiding Shadow-box module. */
-	mutex_lock(&module_mutex);
-	list_del(&THIS_MODULE->list);
-	kobject_del(&THIS_MODULE->mkobj.kobj);
-	mutex_unlock(&module_mutex);
 
 	sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "Execution Complete\n");
 	sb_error_log(ERROR_SUCCESS);
