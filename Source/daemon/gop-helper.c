@@ -168,6 +168,21 @@ int main(void)
 		return -1;
 	}
 
+	/* systemd가 수행 완료될 때까지 10초 대기. */
+	for (i = 0 ; i < 10 ; i++)
+	{
+		sleep(1);
+		error = system("/bin/journalctl -b | grep -n \"NetworkManager\" | grep \"manager: startup complete\"");
+		if ((error == 127) || (error == -1))
+		{
+			continue;
+		}
+		else if(WEXITSTATUS(error) == 0)
+		{
+			break;
+		}
+	}
+
 	/* 시작되었다는 메시지를 표시. */
 	write_msg_to_file(ERROR_NOT_START);
 

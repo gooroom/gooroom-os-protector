@@ -14,6 +14,7 @@
 set -e
 
 GOP_HELPER_PATH="/usr/share/gooroom/security/os-protector/gop-helper"
+GOP_HELPER_NAME="gop-helper"
 PRELOAD_MODULE="/usr/share/gooroom/security/os-protector/preload_module"
 SERVICE_NAME="gop-daemon"
 SERVICE_PATH="/usr/share/gooroom/security/os-protector/$SERVICE_NAME"
@@ -34,8 +35,8 @@ MODULES=""
 ret_value_of_check=
 
 check() {
-	MAIN_DRIVER_LOADED=`lsmod | grep -w $MAIN_DRIVER_NAME || true`
-	if [ \( -f $MAIN_DRIVER_PATH \) -a \( -f $HELPER_DRIVER_PATH \) -a \( -f $GOP_HELPER_PATH \) -a "$MAIN_DRIVER_LOADED" != "" ]; then
+	GOP_HELPER_LOADED=`ps -e | grep -w $GOP_HELPER_NAME || true`
+	if [ \( -f $MAIN_DRIVER_PATH \) -a \( -f $HELPER_DRIVER_PATH \) -a \( -f $GOP_HELPER_PATH \) -a "$GOP_HELPER_LOADED" != "" ]; then
 		log_action_msg "$TAG_NAME:" "$SERVICE_NAME active"
 		ret_value_of_check="0"
 	else
