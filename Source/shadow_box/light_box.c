@@ -2423,7 +2423,7 @@ static int sb_vm_thread(void* argument)
 
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] Wait until stable status\n",
 		cpu_id);
-	mdelay(2000);
+	mdelay(10);
 
 	/* Synchronize processors. */
 	atomic_dec(&g_sync_flags);
