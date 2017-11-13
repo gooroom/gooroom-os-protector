@@ -113,7 +113,7 @@ void write_msg_to_file(int error_code)
 	/* 에러코드의 범위 검사. */
 	if (error_code >= (sizeof(msg_buffer) / sizeof(char*)))
 	{
-		sprintf(msg_unknown_buffer, "알 수 없는 오류가 발생했습니다. 에러코드:%d", error_code);
+		snprintf(msg_unknown_buffer, sizeof(msg_unknown_buffer), "알 수 없는 오류가 발생했습니다. 에러코드:%d", error_code);
 		fwrite(msg_unknown_buffer, 1, strlen(msg_unknown_buffer), fp);
 		fprintf(stderr, "message: %s\n", msg_unknown_buffer);
 	}
@@ -123,6 +123,40 @@ void write_msg_to_file(int error_code)
 		fprintf(stderr, "message: %s\n", msg_buffer[error_code]);
 	}
 	fclose(fp);
+}
+
+/*
+ *	안전한 system() 함수
+ */
+int safe_system(char* path, char* argv[], int* status)
+{
+	pid_t pid;
+	int ret;
+
+	pid = fork();
+	if (pid == -1)
+	{
+		return -1;
+	}
+	// 자식의 경우
+	else if (pid == 0)
+	{
+		execve(path, argv, NULL);
+		exit(-1);
+	}
+	// 부모의 경우
+	else
+	{
+		ret = wait(status);
+		if (ret > 0)
+		{
+			return 0;
+		}
+		else
+		{
+			return ret;
+		}
+	}
 }
 
 /*
@@ -141,6 +175,11 @@ int main(void)
 	char insmod_buffer[200];
 	int i;
 	long argument;
+	int status;
+	char* argv_wait[] = {"/usr/share/gooroom/security/os-protector/wait.sh", NULL};
+	char* argv_helper[] = {"/sbin/insmod", "/usr/share/gooroom/security/os-protector/shadow_box_helper.ko", NULL};
+	char* argv_shadowbox[] = {"/sbin/insmod", "/usr/share/gooroom/security/os-protector/shadow_box.ko", NULL};
+	char* argv_rmmod[] = {"/sbin/rmmod", "shadow_box_helper", NULL};
 
 	/* Daemon 만드는 코드. */
 	if (daemon(1, 1) == -1)
@@ -168,41 +207,31 @@ int main(void)
 		return -1;
 	}
 
-	/* systemd가 수행 완료될 때까지 10초 대기. */
-	for (i = 0 ; i < 10 ; i++)
+	/* systemd가 수행 완료될 때까지 대기. */
+	error = safe_system(argv_wait[0], argv_wait, &status);
+	if (error != 0)
 	{
-		sleep(1);
-		error = system("/bin/journalctl -b | grep -n \"NetworkManager\" | grep \"manager: startup complete\"");
-		if ((error == 127) || (error == -1))
-		{
-			continue;
-		}
-		else if(WEXITSTATUS(error) == 0)
-		{
-			break;
-		}
+		return -1;
 	}
 
 	/* 시작되었다는 메시지를 표시. */
 	write_msg_to_file(ERROR_NOT_START);
 
 	/* Shadow-box 모듈과 Shadow-box helper 모듈을 로딩. */
-	sprintf(insmod_buffer, "/sbin/insmod /usr/share/gooroom/security/os-protector/shadow_box_helper.ko");
-	error = system(insmod_buffer);
-	if ((error == 127) || (error == -1))
+	error = safe_system(argv_helper[0], argv_helper, &status);
+	if (error != 0)
 	{
 		fprintf(stderr, "Shadow-box-helper module insmod fail\n", strerror(errno));
 		return -1;
 	}
-	else if (WEXITSTATUS(error) != 0)
+	else if (WEXITSTATUS(status) != 0)
 	{
 		fprintf(stderr, "Shadow-box-helper module load fail\n", strerror(errno));
 		return -1;
 	}
 
-	sprintf(insmod_buffer, "/sbin/insmod /usr/share/gooroom/security/os-protector/shadow_box.ko");
-	error = system(insmod_buffer);
-	if ((error == 127) || (error == -1))
+	error = safe_system(argv_shadowbox[0], argv_shadowbox, &status);
+	if (error != 0)
 	{
 		fprintf(stderr, "Shadow-box module insmod fail\n", strerror(errno));
 		return -1;
@@ -218,14 +247,14 @@ int main(void)
 	if (fd < 0)
 	{
 		fprintf(stderr, "Shadow-box-helper module start fail\n", strerror(errno));
-		system("rmmod shadow_box_helper");
+		safe_system(argv_rmmod[0], argv_rmmod, &status);
 		return -1;
 	}
 
 	if (ioctl(fd, IOCTL_START_LOGGING, &argument) != 0)
 	{
 		fprintf(stderr, "Shadow-box-helper module start fail\n", strerror(errno));
-		system("rmmod shadow_box_helper");
+		safe_system(argv_rmmod[0], argv_rmmod, &status);
 		return -1;
 	}
 

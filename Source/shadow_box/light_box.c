@@ -829,11 +829,11 @@ void vm_dump_memory(u8* addr, int size)
 	for (j = 0 ; j < size / 16 ; j++)
 	{
 		memset(buffer, 0, sizeof(buffer));
-		sprintf(buffer, "[%04X] ", j * 16);
+		snprintf(buffer, sizeof(buffer), "[%04X] ", j * 16);
 		for (i = 0 ; i < 16 ; i++)
 		{
-			sprintf(temp, "%02X ", addr[j * 16 + i]);
-			strcat(buffer, temp);
+			snprintf(temp, sizeof(temp), "%02X ", addr[j * 16 + i]);
+			strlcat(buffer, temp, sizeof(buffer));
 		}
 
 		sb_printf(LOG_LEVEL_NONE, LOG_INFO "%s\n", buffer);
