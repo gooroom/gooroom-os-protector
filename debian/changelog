@@ -1,3 +1,22 @@
+gooroom-os-protector (1.8.1+4.9.30~2+deb9u2+grm1u1) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [d9441cc5] Processes in the control file when installing kernel dependencies in rules
+  * [41fbbbac] Released 4.9.30-2+deb9u5+grm1u1
+
+  [ Seunghun Han ]
+  * [59374e1e] Remove unused files and change vm-timer
+  * [aa0ca7df] fix an invalid directory bug
+  * [a47e0b14] fix a service restart bug and add a cr0 wp bit recovery feature
+  * [cf482a70] fix a run status bug and add a VT-x status check of BIOS
+  * [7da906ad] Change loading time of Shadow-box
+  * [5483d124] Change delay time to support ath10k driver
+  * [5a3d2e1f] Remove potential security vulnerabilities
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Thu, 16 Nov 2017 18:11:10 +0900
+
 gooroom-os-protector (1.8.0) stable; urgency=medium
 
   * Initial Release
