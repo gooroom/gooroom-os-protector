@@ -3626,10 +3626,15 @@ static void sb_vm_exit_callback_gdtr_idtr(int cpu_id, struct sb_vm_exit_guest_re
 	{
 		sb_printf(LOG_LEVEL_NONE, LOG_INFO "VM [%d] ===================WARNING======================\n",
 			cpu_id);
-		sb_printf(LOG_LEVEL_NONE, LOG_INFO "VM [%d] sb_vm_exit_callback_gdtr_idtr\n",
+		sb_printf(LOG_LEVEL_NONE, LOG_ERROR "VM [%d] GDTR or IDTR attack is detected\n",
 			cpu_id);
 		sb_printf(LOG_LEVEL_NONE, LOG_INFO "VM [%d] ===================WARNING======================\n",
 			cpu_id);
+
+		sb_printf(LOG_LEVEL_NONE, LOG_ERROR "VM [%d] Memory attack is detected, "
+			"guest linear=(GDTR/IDTR) guest physical=(GDTR/IDTR) virt_to_phys=(GDTR/IDTR)\n",
+			cpu_id);
+		sb_error_log(ERROR_KERNEL_MODIFICATION);
 
 		sb_advance_vm_guest_rip();
 	}
@@ -3821,6 +3826,9 @@ static void sb_vm_exit_callback_pre_timer_expired(int cpu_id)
 		if (sb_check_gdtr(cpu_id) == -1)
 		{
 			sb_printf(LOG_LEVEL_NONE, LOG_ERROR "VM [%d] GDTR or IDTR attack is detected\n", cpu_id);
+			sb_printf(LOG_LEVEL_NONE, LOG_ERROR "VM [%d] Memory attack is detected, "
+				"guest linear=(GDTR/IDTR) guest physical=(GDTR/IDTR) virt_to_phys=(GDTR/IDTR)\n",
+				cpu_id);
 			sb_error_log(ERROR_KERNEL_MODIFICATION);
 		}
 
