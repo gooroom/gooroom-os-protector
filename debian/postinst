@@ -14,3 +14,4 @@ fi
 
 # Disable hibernate and suspend function in systemd config to support notebook
 sed -i 's/#HandleSuspendKey=suspend/HandleSuspendKey=ignore/; s/#HandleHibernateKey=hibernate/HandleHibernateKey=ignore/; s/#HandleLidSwitch=suspend/HandleLidSwitch=ignore/' /etc/systemd/logind.conf
+sed -i 's/#xserver-command=X/xserver-command=X -s 0 dpms/' /etc/lightdm/lightdm.conf
