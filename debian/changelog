@@ -1,3 +1,12 @@
+gooroom-os-protector (1.8.3+4.9.82~1+deb9u3+grm1u1) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [384c352e] Released 4.9.82-1+deb9u3+grm1u1 (4.9.0-6-amd64)
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Thu, 08 Mar 2018 12:40:11 +0900
+
 gooroom-os-protector (1.8.3+4.9.65~3+deb9u2+grm1u1) stable; urgency=medium
 
   [ Seunghun Han ]
