@@ -4,7 +4,7 @@ export DEB_CFLAGS_SET=-O2
 
 DHFLAGS=--parallel
 
-UNAME_R=4.9.0-5-amd64
+UNAME_R=4.9.0-6-amd64
 UNAME_V=\#1 SMP gooroom 4.9.82-1+deb9u3+grm1u1 (2018-03-05)
 
 %:
