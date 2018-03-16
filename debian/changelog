@@ -1,3 +1,12 @@
+gooroom-os-protector (1.8.3+4.9.82~1+deb9u3+grm1u2) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [4dc237d6] [bugfix] Fixed UNAME_R in rules
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Fri, 16 Mar 2018 12:31:17 +0900
+
 gooroom-os-protector (1.8.3+4.9.82~1+deb9u3+grm1u1) stable; urgency=medium
 
   [ jongkyung.woo ]
