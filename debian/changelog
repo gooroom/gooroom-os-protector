@@ -1,3 +1,12 @@
+gooroom-os-protector (1.8.3+4.9.82~1+deb9u3+grm1u3) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [5e22ec32] Added pti=off parameter as an emergency patch for the os-protector
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Mon, 19 Mar 2018 16:16:35 +0900
+
 gooroom-os-protector (1.8.3+4.9.82~1+deb9u3+grm1u2) stable; urgency=medium
 
   [ jongkyung.woo ]
