@@ -8,7 +8,7 @@ update-rc.d gop-daemon defaults
 service gbp-daemon status > /dev/null
 ret=$?
 if [ \( $ret -ne 0 \) -a \( $ret -ne 3 \) ]; then
-	sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=\"/GRUB_CMDLINE_LINUX_DEFAULT=\"intremap=off pti=off/' /etc/default/grub
+	sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=\"/GRUB_CMDLINE_LINUX_DEFAULT=\"intremap=off pti=off /' /etc/default/grub
 	update-grub
 fi
 
