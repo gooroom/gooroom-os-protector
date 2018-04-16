@@ -1,3 +1,12 @@
+gooroom-os-protector (2.0.0+4.9.82~1+deb9u3+grm1u2) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [aa93961e] Romove pti=off parameter at version 2.0.0
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Mon, 16 Apr 2018 18:06:36 +0900
+
 gooroom-os-protector (2.0.0+4.9.82~1+deb9u3+grm1u1) stable; urgency=medium
 
   [ Seunghun Han ]
