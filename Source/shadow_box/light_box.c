@@ -2169,7 +2169,7 @@ static void sb_dup_page_table_for_host(void)
 
 	g_vm_host_phy_pml4 = virt_to_phys(vm_pml4);
 
-	sb_printf(LOG_LEVEL_NONE, LOG_INFO "PML4 Logical %016lX, Physical %016lX, "
+	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "PML4 Logical %016lX, Physical %016lX, "
 		"page_offset_base %016lX\n", vm_pml4, g_vm_host_phy_pml4, page_offset_base);
 
 	/* Create page tables */
@@ -2200,7 +2200,7 @@ static void sb_dup_page_table_for_host(void)
 		org_pdpte_pd = phys_to_virt((u64)org_pdpte_pd);
 		vm_pdpte_pd = phys_to_virt((u64)vm_pdpte_pd);
 
-		sb_printf(LOG_LEVEL_NONE, LOG_INFO "    [*] PML4[%d] %16lX %16lp %16lp\n",
+		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] PML4[%d] %16lX %16lp %16lp\n",
 			i, org_pml4->entry[i], org_pdpte_pd, vm_pdpte_pd);
 		for (j = 0 ; j < 512 ; j++)
 		{
@@ -3441,6 +3441,7 @@ static void sb_vm_exit_callback_vmcall(int cpu_id, struct sb_vm_exit_guest_regis
 {
 	u64 svr_num;
 	void* arg;
+	u64 cs_selector;
 
 	svr_num = guest_context->rax;
 	arg = (void*)guest_context->rbx;
@@ -3450,6 +3451,14 @@ static void sb_vm_exit_callback_vmcall(int cpu_id, struct sb_vm_exit_guest_regis
 
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] VMCALL index[%ld], arg_in[%016lX]\n",
 		cpu_id, svr_num, arg);
+
+	/* Only kernel call vmcall (CPL=0) */
+	sb_read_vmcs(VM_GUEST_CS_SELECTOR, &cs_selector);
+	if ((cs_selector & MASK_GDT_ACCESS) != 0)
+	{
+		sb_advance_vm_guest_rip();
+		return ;
+	}
 
 	/* Move RIP to next instruction. */
 	sb_advance_vm_guest_rip();
