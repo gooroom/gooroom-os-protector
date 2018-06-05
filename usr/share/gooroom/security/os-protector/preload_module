@@ -4,3 +4,11 @@
 modprobe ip_tables
 modprobe iptable_filter
 modprobe xt_owner
+modprobe arc4
+modprobe ccm
+modprobe ctr
+modprobe rfcomm
+modprobe usbhid
+modprobe hid_generic
+modprobe snd_hda_codec_hdmi
+modprobe uas

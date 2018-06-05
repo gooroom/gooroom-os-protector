@@ -24,6 +24,9 @@ HELPER_DRIVER_NAME="shadow_box_helper"
 HELPER_DRIVER_PATH="/usr/share/gooroom/security/os-protector/$HELPER_DRIVER_NAME.ko"
 TAG_NAME="GOP"
 
+SLEEP_HELPER_PATH="/usr/share/gooroom/security/os-protector/sleep.py"
+SLEEP_HELPER_NAME="sleep.py"
+
 # Check for daemon presence
 #[ -x "$GOP_HELPER_PATH" ] || exit 0
 
@@ -56,6 +59,7 @@ case "$1" in
 		if [ "$HELPER_LOADED" = "" ]; then
 			$PRELOAD_MODULE
 			$GOP_HELPER_PATH
+			$SLEEP_HELPER_PATH
 			sleep 3
 		fi
 		check
@@ -66,6 +70,7 @@ case "$1" in
 		log_daemon_msg "$TAG_NAME" "Stop Gooroom OS Protector service"
 		log_end_msg 0
 		logger --id=$$ -p 3 -t $SERVICE_NAME "$TAG_NAME: errorcode=1"
+		killall $SLEEP_HELPER_NAME
 	;;
 
 	enable-autostart)
