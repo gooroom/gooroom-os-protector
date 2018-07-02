@@ -59,7 +59,7 @@ case "$1" in
 		if [ "$HELPER_LOADED" = "" ]; then
 			$PRELOAD_MODULE
 			$GOP_HELPER_PATH
-			$SLEEP_HELPER_PATH
+			$SLEEP_HELPER_PATH &
 			sleep 3
 		fi
 		check
