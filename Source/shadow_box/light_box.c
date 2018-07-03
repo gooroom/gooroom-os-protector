@@ -543,7 +543,7 @@ static void sb_print_shadow_box_logo(void)
 	sb_printf(LOG_LEVEL_ERROR, "███████║██║  ██║██║  ██║██████╔╝╚██████╔╝╚███╔███╔╝      ██████╔╝╚██████╔╝██╔╝ ██╗\n");
 	sb_printf(LOG_LEVEL_ERROR, "╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝  ╚═════╝  ╚══╝╚══╝       ╚═════╝  ╚═════╝ ╚═╝  ╚═╝\n");
 	sb_printf(LOG_LEVEL_ERROR, "     \n");
-	sb_printf(LOG_LEVEL_ERROR, "              Lightweight Hypervisor-Based Kernel Protector v2.0.0\n");
+	sb_printf(LOG_LEVEL_ERROR, "              Lightweight Hypervisor-Based Kernel Protector v%s\n", SHADOWBOX_VERSION);
 	sb_printf(LOG_LEVEL_ERROR, "     \n");
 }
 

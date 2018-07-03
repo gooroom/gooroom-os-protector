@@ -17,6 +17,8 @@
 /*
  * Macros.
  */
+#define SHADOWBOX_VERSION				"2.1.0"
+
 /* Feature list of Shadow-box. */
 /*
  * IOMMU is experimental feature. If you want to enable this feature, you should
