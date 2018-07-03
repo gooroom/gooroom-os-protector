@@ -1,3 +1,14 @@
+gooroom-os-protector (2.1.0+4.9.82~1+deb9u3+grm1u1) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [2656e4b4] Add sleep feature
+  * [35c49fbe] Fix gop-daemon hang bug
+  * [ae9943ff] Update version number
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Wed, 04 Jul 2018 06:04:19 +0900
+
 gooroom-os-protector (2.0.1+4.9.82~1+deb9u3+grm1u1) stable; urgency=medium
 
   [ Seunghun Han ]
