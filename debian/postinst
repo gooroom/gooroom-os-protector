@@ -12,6 +12,6 @@ if [ \( $ret -ne 0 \) -a \( $ret -ne 3 \) ]; then
 	update-grub
 fi
 
-# Disable hibernate and suspend function in systemd config to support notebook
-sed -i 's/#HandleSuspendKey=suspend/HandleSuspendKey=ignore/; s/#HandleHibernateKey=hibernate/HandleHibernateKey=ignore/; s/#HandleLidSwitch=suspend/HandleLidSwitch=ignore/' /etc/systemd/logind.conf
-sed -i 's/#xserver-command=X/xserver-command=X -s 0 dpms/' /etc/lightdm/lightdm.conf
+# Delete previous plka file
+rm -f /etc/polkit-1/localauthority/90-mandatory.d/disable-suspend.pkla
+rm -f /etc/polkit-1/localauthority/90-mandatory.d/disable-hibernate.pkla

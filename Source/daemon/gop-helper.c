@@ -64,7 +64,7 @@ int find_error_code_in_buffer(BUFFER* buffer)
 {
 	int i;
 	int error_code = -1;
-	char* signature = "shadow-box: errorcode=";
+	char* signature = "shadow-box: GRMCODE=";
 
 	/* ; 문자까지 찾은 후 : 문자를 찾음. */
 	for (i = 0 ; i < buffer->index ; i++)
@@ -166,7 +166,6 @@ int main(void)
 {
 	pid_t pid;
 	int fd;
-	FILE* fp_kmsg;
 	char buffer[2];
 	int read_size;
 	int error;
@@ -262,36 +261,11 @@ int main(void)
 
 	clear_buffer(&line_buffer);
 
-	/* /proc/kmsg를 열지 못하면 실패. */
-	fp_kmsg = fopen("/dev/kmsg", "r");
-	if (fp_kmsg == NULL)
-	{
-		fprintf(stderr, "/proc/kmsg open fail\n");
-		return -1;
-	}
-
 	print_id("os_protector start success.");
 
 	while(1)
 	{
-		read_size = fread(buffer, 1, sizeof(buffer) - 1, fp_kmsg);	
-		buffer[read_size] = '\0';
-
-		if (add_to_buffer(&line_buffer, buffer[0]) == 1)
-		{
-			error_code = find_error_code_in_buffer(&line_buffer);
-			if (error_code != -1)
-			{
-				fprintf(stderr, "errorcode: %d\n", error_code);
-				write_msg_to_file(error_code);
-			}
-			clear_buffer(&line_buffer);
-		}
-
-		if (read_size < (sizeof (buffer) - 1))
-		{
-			sleep(1);
-		}
+		sleep(1);
 	}
 
 	stdin = freopen("/dev/null", "r", stdin);

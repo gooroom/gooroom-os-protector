@@ -102,15 +102,10 @@ void sb_protect_ept_pages(void)
 
 /*
  * Hide a physical page to protect it from the guest.
- *
- * When Shadow-box sets no permission to the page, error is occured in some
- * system. So, for hiding a physical page, Shadow-box sets read-only
- * permission to the page and maps guest physical page to page number 0.
  */
 void sb_set_ept_hide_page(u64 phy_addr)
 {
-	sb_set_ept_page_flags(phy_addr, EPT_READ | EPT_BIT_MEM_TYPE_WB);
-	sb_set_ept_page_addr(phy_addr, 0);
+	sb_set_ept_page_flags(phy_addr, EPT_BIT_MEM_TYPE_WB);
 }
 
 /*

@@ -24,9 +24,6 @@ HELPER_DRIVER_NAME="shadow_box_helper"
 HELPER_DRIVER_PATH="/usr/share/gooroom/security/os-protector/$HELPER_DRIVER_NAME.ko"
 TAG_NAME="GOP"
 
-SLEEP_HELPER_PATH="/usr/share/gooroom/security/os-protector/sleep.py"
-SLEEP_HELPER_NAME="sleep.py"
-
 # Check for daemon presence
 #[ -x "$GOP_HELPER_PATH" ] || exit 0
 
@@ -35,42 +32,56 @@ MODULES=""
 
 # Get lsb functions
 . /lib/lsb/init-functions
-ret_value_of_check=
+ret_value_of_check=0
 
+# Write a syslog message
+#  $1 - Message
+#  $2 - Error code
+#  $3 - Priority
+out_log()
+{
+	/usr/bin/python3 -c "from systemd import journal;journal.send('$TAG_NAME: $1', SYSLOG_IDENTIFIER='$SERVICE_NAME', GRMCODE='$2', PRIORITY=$3)"
+}
+
+# Check status of security service
 check() {
 	GOP_HELPER_LOADED=`ps -e | grep -w $GOP_HELPER_NAME || true`
 	if [ \( -f $MAIN_DRIVER_PATH \) -a \( -f $HELPER_DRIVER_PATH \) -a \( -f $GOP_HELPER_PATH \) -a "$GOP_HELPER_LOADED" != "" ]; then
 		log_action_msg "$TAG_NAME:" "$SERVICE_NAME active"
-		ret_value_of_check="0"
+		ret_value_of_check=0
 	else
 		log_action_msg "$TAG_NAME:" "$SERVICE_NAME inactive"
-		ret_value_of_check="-1"
+		ret_value_of_check=-1
 	fi
 }
 
-# OS 보호 서비스
+# OS protector service main
 case "$1" in
 	start)
 		log_daemon_msg "$TAG_NAME" "Start Gooroom OS Protector service"
 		log_end_msg 0
 
 		HELPER_LOADED=`lsmod | grep $HELPER_DRIVER_NAME || true`
-		# 시스템 레벨에서 동작하는 중요한 드라이버 및 데몬이므로 중복 로드하지 않도록 처리
+
+		# Prevent multiple loading
 		if [ "$HELPER_LOADED" = "" ]; then
 			$PRELOAD_MODULE
 			$GOP_HELPER_PATH
-			$SLEEP_HELPER_PATH &
 			sleep 3
 		fi
 		check
-		logger --id=$$ -p 3 -t $SERVICE_NAME "$TAG_NAME: errorcode=$ret_value_of_check"
+
+		if [ $ret_value_of_check -eq 0 ]; then
+			out_log "started successfully" "020001" 6
+		else
+			out_log "failed to start" "020003" 3
+		fi
 	;;
 
 	stop)
 		log_daemon_msg "$TAG_NAME" "Stop Gooroom OS Protector service"
 		log_end_msg 0
-		logger --id=$$ -p 3 -t $SERVICE_NAME "$TAG_NAME: errorcode=1"
-		killall $SLEEP_HELPER_NAME
+		out_log "stoped successfully" "020002" 6
 	;;
 
 	enable-autostart)
