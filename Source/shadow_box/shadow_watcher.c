@@ -158,17 +158,20 @@ void sb_protect_shadow_watcher_data(void)
 /*
  * Initialize Shadow-watcher.
  */
-void sb_init_shadow_watcher(void)
+void sb_init_shadow_watcher(int reinitialize)
 {
 	spin_lock_init(&g_time_lock);
 
 	sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "Framework Initailize\n");
 
-	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] Check task list\n");
-	sb_copy_task_list_to_sw_task_manager();
+	if (reinitialize == 0)
+	{
+		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] Check task list\n");
+		sb_copy_task_list_to_sw_task_manager();
 
-	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] Check module list\n");
-	sb_copy_module_list_to_sw_module_manager();
+		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] Check module list\n");
+		sb_copy_module_list_to_sw_module_manager();
+	}
 
 	sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "    [*] Task count %d\n", g_task_count);
 	sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "    [*] Module count %d\n", g_module_count);
@@ -534,8 +537,8 @@ static int sb_check_sw_task_list(int cpu_id)
 				continue;
 			}
 
-			sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] Hidden task, PID=%d "
-				"TGID=%d fork name=\"%s\" process name=\"%s\"\n", cpu_id,
+			sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] GRMCODE=%06d Hidden task, PID=%d "
+				"TGID=%d fork name=\"%s\" process name=$(\"%s\")\n", cpu_id, ERROR_TASK_HIDDEN,
 				target->pid, target->tgid, target->comm, target->task->comm);
 
 			sb_del_task_from_sw_task_manager(target->pid, target->tgid);
@@ -726,8 +729,8 @@ static int sb_check_sw_module_list(int cpu_id)
 				continue;
 			}
 
-			sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] Hidden module, module "
-				"name=\"%s\" ptr=%016lX\n", cpu_id, target->name, target->module);
+			sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] GRMCODE=%06d Hidden module, module "
+				"name=$(\"%s\") ptr=%016lX\n", cpu_id, ERROR_MODULE_HIDDEN, target->name, target->module);
 
 			sw_del_module_from_sw_module_manager(target->module);
 		}
@@ -1049,8 +1052,8 @@ static int sb_check_sw_inode_op_fields(int cpu_id, const struct inode_operations
 
 	if (error != 0)
 	{
-		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] Function pointer attack is "
-			"detected, function pointer=\"%s inode_op\"\n", cpu_id, obj_name);
+		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] GRMCODE=%06d Function pointer attack is "
+			"detected, function pointer=$(\"%s inode_op\")\n", cpu_id, ERROR_KERNEL_POINTER_MODIFICATION, obj_name);
 
 		sb_error_log(ERROR_KERNEL_MODIFICATION);
 		return -1;
@@ -1112,8 +1115,8 @@ static int sb_check_sw_file_op_fields(int cpu_id, const struct file_operations* 
 
 	if (error != 0)
 	{
-		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] Function pointer attack is "
-			"detected, function pointer=\"%s file_op\"\n", cpu_id, obj_name);
+		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] GRMCODE=%06d Function pointer attack is "
+			"detected, function pointer=$(\"%s file_op\")\n", cpu_id, ERROR_KERNEL_POINTER_MODIFICATION, obj_name);
 		sb_error_log(ERROR_KERNEL_MODIFICATION);
 		return -1;
 	}
@@ -1200,8 +1203,8 @@ static int sb_check_sw_tcp_seq_afinfo_fields(int cpu_id, const struct tcp_seq_af
 
 	if (error != 0)
 	{
-		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] Function pointer attack is "
-			"detected, function pointer=\"%s tcp_seq_afinfo\"\n", cpu_id, obj_name);
+		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] GRMCODE=%06d Function pointer attack is "
+			"detected, function pointer=$(\"%s tcp_seq_afinfo\")\n", cpu_id, ERROR_KERNEL_POINTER_MODIFICATION, obj_name);
 
 		sb_error_log(ERROR_KERNEL_MODIFICATION);
 		return -1;
@@ -1232,8 +1235,8 @@ static int sb_check_sw_udp_seq_afinfo_fields(int cpu_id, const struct udp_seq_af
 
 	if (error != 0)
 	{
-		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] Function pointer attack is "
-			"detected, function pointer=\"%s udp_seq_afinfo\"\n", cpu_id, obj_name);
+		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] GRMCODE=%06d Function pointer attack is "
+			"detected, function pointer=$(\"%s udp_seq_afinfo\")\n", cpu_id, ERROR_KERNEL_POINTER_MODIFICATION, obj_name);
 
 		sb_error_log(ERROR_KERNEL_MODIFICATION);
 		return -1;
@@ -1276,8 +1279,8 @@ static int sb_check_sw_proto_op_fields(int cpu_id, const struct proto_ops* op, c
 	error |= !sb_is_addr_in_ro_area(op->set_peek_off);
 	if (error != 0)
 	{
-		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] Function pointer attack is "
-			"detected, function pointer=\"%s proto_seq_afinfo\"\n", cpu_id, obj_name);
+		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] GRMCODE=%06d Function pointer attack is "
+			"detected, function pointer=$(\"%s proto_seq_afinfo\")\n", cpu_id, ERROR_KERNEL_POINTER_MODIFICATION, obj_name);
 
 		sb_error_log(ERROR_KERNEL_MODIFICATION);
 		return -1;

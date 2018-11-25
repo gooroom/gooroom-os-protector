@@ -897,6 +897,7 @@ static void start_iommu(u8* reg_remap_addr, int skip)
 	}
 }
 
+#if SHADOWBOX_USE_I915_WORKAROUND
 /*
  * Workaround for i915 driver.
  * To support IOMMU, GFX DRHD is skipped.
@@ -981,6 +982,17 @@ static int sb_is_intel_graphics_in(struct acpi_dmar_hardware_unit* drhd)
 
 	return 0;
 }
+#else
+static int sb_need_intel_i915_workaround(void)
+{
+	return 0;
+}
+
+static int sb_is_intel_graphics_in(struct acpi_dmar_hardware_unit* drhd)
+{
+	return 0;
+}
+#endif
 
 /*
  * Lock IOMMU area.

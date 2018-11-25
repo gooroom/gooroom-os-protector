@@ -17,7 +17,7 @@
 /*
  * Macros.
  */
-#define SHADOWBOX_VERSION				"2.1.0"
+#define SHADOWBOX_VERSION				"2.2.0"
 
 /* Feature list of Shadow-box. */
 /*
@@ -45,6 +45,8 @@
 #define SHADOWBOX_USE_DESC_TABLE		1
 #define SHADOWBOX_USE_PRE_TIMER			1
 #define SHADOWBOX_USE_PRE_SYMBOL		1
+#define SHADOWBOX_USE_I915_WORKAROUND	0
+#define SHADOWBOX_USE_SLEEP				1
 #define SHADOWBOX_USE_VPID				0
 
 /*
@@ -553,22 +555,26 @@
 #define CR4_BIT_SMXE							((u64)0x01 << 14)
 
 /* Shadow-box error codes. */
-#define ERROR_SUCCESS							0
-#define ERROR_NOT_START						 	1
-#define ERROR_HW_NOT_SUPPORT					2
-#define ERROR_LAUNCH_FAIL						3
-#define ERROR_KERNEL_MODIFICATION				4
-#define ERROR_KERNEL_VERSION_MISMATCH			5
-#define ERROR_SHUTDOWN_TIME_OUT					6
-#define ERROR_MEMORY_ALLOC_FAIL					7
-#define ERROR_TASK_OVERFLOW						8
-#define ERROR_MODULE_OVERFLOW					9
+#define ERROR_SUCCESS							20008
+#define ERROR_NOT_START						 	20009
+#define ERROR_HW_NOT_SUPPORT					20010
+#define ERROR_LAUNCH_FAIL						20011
+#define ERROR_KERNEL_MODIFICATION				20012
+#define ERROR_KERNEL_VERSION_MISMATCH			20013
+#define ERROR_SHUTDOWN_TIME_OUT					20014
+#define ERROR_MEMORY_ALLOC_FAIL					20015
+#define ERROR_TASK_OVERFLOW						20016
+#define ERROR_MODULE_OVERFLOW					20017
+#define ERROR_KERNEL_MEMORY_MODIFICATION		20004
+#define ERROR_TASK_HIDDEN						20005
+#define ERROR_MODULE_HIDDEN						20006
+#define ERROR_KERNEL_POINTER_MODIFICATION		20007
 
 /* Define allocated memory type. */
 #define ALLOC_KMALLOC							0
 #define ALLOC_VMALLOC							1
 
-/* Define ead-only memory type. */
+/* Define read-only memory type. */
 #define RO_MODULE								0
 #define RO_KERNEL								1
 
@@ -584,6 +590,15 @@
 #define VM_SERVICE_GET_LOGINFO					0
 #define VM_SERVICE_SHUTDOWN						10000
 #define VM_SERVICE_SHUTDOWN_THIS_CORE			10001
+
+/* Define Shadow-box hide modes. */
+#define PROTECT_MODE_HIDE						0
+#define PROTECT_MODE_LOCK						1
+
+/* Define Shadow-box start modes. */
+#define START_MODE_INITIALIZE					0
+#define START_MODE_REINITIALIZE					1
+
 
 /*
  * Structures.
