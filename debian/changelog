@@ -1,3 +1,12 @@
+gooroom-os-protector (2.2.1+4.9.110~3+deb9u6+grm1u2) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [b4dbae48] Change license
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Tue, 30 Apr 2019 13:45:36 +0900
+
 gooroom-os-protector (2.2.0+4.9.110~3+deb9u6+grm1u2) stable; urgency=medium
 
   [ Seunghun Han ]
