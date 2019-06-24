@@ -592,7 +592,7 @@
 
 /* Define for kernel version workaround. */
 #ifndef PGD_ALLOCATION_ORDER
-#define PGD_ALLOCATION_ORDER 					0
+#define PGD_ALLOCATION_ORDER 					1
 #endif
 
 /* Define Shadow-box hide modes. */
@@ -763,34 +763,6 @@ struct sb_share_context
 {
 	atomic_t shutdown_flag;
 	atomic_t shutdown_complete_count;
-};
-
-/* Workaround information structure. */
-struct sb_workaround
-{
-	u64 addr_array[WORK_AROUND_MAX_COUNT];
-	int count_array[WORK_AROUND_MAX_COUNT];
-};
-
-/* Read-only information entry structure. */
-struct ro_addr_struct
-{
-	u64 start;
-	u64 end;
-	u64 type;
-};
-
-/* Predefined symbol entry structure. */
-struct sb_symbol_addr_struct
-{
-	char* name;
-	u64 addr;
-};
-
-/* Predefined symbol structure. */
-struct sb_symbol_table_struct
-{
-	struct sb_symbol_addr_struct symbol[SYMBOL_MAX_COUNT];
 };
 
 /* Shadow-box memory pool structure. */

@@ -26,10 +26,16 @@
 #include "shadow_watcher.h"
 #include "mmu.h"
 #include "asm.h"
+#include "workaround.h"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 #include <linux/vmalloc.h>
 #include <linux/proc_fs.h>
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include <linux/sched/task.h>
+#include <linux/sched/signal.h>
 #endif
 
 /*
@@ -68,8 +74,8 @@ static int sb_check_sw_inode_op_fields(int cpu_id, const struct inode_operations
 	const char* obj_name);
 static int sb_check_sw_file_op_fields(int cpu_id, const struct file_operations* op,
 	const char* obj_name);
-static int sb_check_sw_tcp_seq_afinfo_fields(int cpu_id, const struct tcp_seq_afinfo* op,
-	const char* obj_name);
+static int sb_check_sw_net_seq_afinfo_fields(int cpu_id, const struct file_operations* fops,
+	const struct seq_operations* sops, const char* obj_name);
 static int sb_check_sw_proto_op_fields(int cpu_id, const struct proto_ops* op,
 	const char* obj_name);
 static int sb_check_sw_task_list(int cpu_id);
@@ -247,7 +253,7 @@ static void sb_check_sw_module_periodic(int cpu_id)
 		return ;
 	}
 
-	if(spin_trylock(&g_module_lock))
+	if (spin_trylock(&g_module_lock))
 	{
 		sb_check_sw_module_list(cpu_id);
 		spin_unlock(&g_module_lock);
@@ -566,10 +572,9 @@ void sb_sw_callback_task_switch(int cpu_id)
  *
  * The module is in module list already when this function is called.
  */
-void sb_sw_callback_insmod(int cpu_id)
+void sb_sw_callback_insmod(int cpu_id, struct sb_vm_exit_guest_register* context)
 {
 	struct module *mod;
-	struct list_head* mod_head_node;
 
 	if (g_module_count == 0)
 	{
@@ -577,9 +582,9 @@ void sb_sw_callback_insmod(int cpu_id)
 	}
 
 	/* Get last module information and synchronize before introspection. */
-	mod_head_node = g_modules_ptr;
-	mod = list_entry((mod_head_node->next), struct module, list);
+	mod = (struct module*)context->rdi;
 	sb_sync_sw_page((u64)mod, sizeof(struct module));
+	sb_sync_sw_page((u64)current, sizeof(struct task_struct));
 
 	sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] Kernel module is loaded, "
 		"current PID=%d PPID=%d process name=%s module=%s\n", cpu_id,
@@ -660,7 +665,7 @@ void sb_sw_callback_rmmod(int cpu_id, struct sb_vm_exit_guest_register* context)
 		{
 			/* Shadow-box-helper should not be unloaded. */
 			sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] Process try to unload, "
-				"Shado-box-helper. current PID=%d PPID=%d process name=%s\n", 
+				"Shadow-box-helper. current PID=%d PPID=%d process name=%s\n", 
 				cpu_id, current->pid, current->parent->pid, current->comm);
 		}
 
@@ -1169,14 +1174,15 @@ static int sb_check_sw_vfs_object(int cpu_id)
 }
 
 /*
- * Check integrity of TCP function pointers.
+ * Check integrity of TCP/UDP function pointers.
  */
-static int sb_check_sw_tcp_seq_afinfo_fields(int cpu_id, const struct tcp_seq_afinfo* op,
+static int sb_check_sw_net_seq_afinfo_fields(int cpu_id,
+	const struct file_operations* fops, const struct seq_operations* sops,
 	const char* obj_name)
 {
 	int error = 0;
 
-	if (sb_check_sw_file_op_fields(cpu_id, op->seq_fops, obj_name) < 0)
+	if (sb_check_sw_file_op_fields(cpu_id, fops, obj_name) < 0)
 	{
 		return -1;
 	}
@@ -1184,47 +1190,15 @@ static int sb_check_sw_tcp_seq_afinfo_fields(int cpu_id, const struct tcp_seq_af
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Check %s seq_operations function "
 		"pointer\n", obj_name);
 
-	error |= !sb_is_addr_in_ro_area(op->seq_ops.start);
-	error |= !sb_is_addr_in_ro_area(op->seq_ops.stop);
-	error |= !sb_is_addr_in_ro_area(op->seq_ops.next);
-	error |= !sb_is_addr_in_ro_area(op->seq_ops.show);
+	error |= !sb_is_addr_in_ro_area(sops->start);
+	error |= !sb_is_addr_in_ro_area(sops->stop);
+	error |= !sb_is_addr_in_ro_area(sops->next);
+	error |= !sb_is_addr_in_ro_area(sops->show);
 
 	if (error != 0)
 	{
 		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] GRMCODE=%06d Function pointer attack is "
-			"detected, function pointer=$(\"%s tcp_seq_afinfo\")\n", cpu_id, ERROR_KERNEL_POINTER_MODIFICATION, obj_name);
-
-		sb_error_log(ERROR_KERNEL_MODIFICATION);
-		return -1;
-	}
-	return 0;
-}
-
-/*
- * Check integrity of UDP function pointers.
- */
-static int sb_check_sw_udp_seq_afinfo_fields(int cpu_id, const struct udp_seq_afinfo* op,
-	const char* obj_name)
-{
-	int error = 0;
-
-	if (sb_check_sw_file_op_fields(cpu_id, op->seq_fops, obj_name) < 0)
-	{
-		return -1;
-	}
-
-	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Check %s seq_operations function "
-		"pointer\n", obj_name);
-
-	error |= !sb_is_addr_in_ro_area(op->seq_ops.start);
-	error |= !sb_is_addr_in_ro_area(op->seq_ops.stop);
-	error |= !sb_is_addr_in_ro_area(op->seq_ops.next);
-	error |= !sb_is_addr_in_ro_area(op->seq_ops.show);
-
-	if (error != 0)
-	{
-		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] GRMCODE=%06d Function pointer attack is "
-			"detected, function pointer=$(\"%s udp_seq_afinfo\")\n", cpu_id, ERROR_KERNEL_POINTER_MODIFICATION, obj_name);
+			"detected, function pointer=$(\"%s seq_afinfo\")\n", cpu_id, ERROR_KERNEL_POINTER_MODIFICATION, obj_name);
 
 		sb_error_log(ERROR_KERNEL_MODIFICATION);
 		return -1;
@@ -1236,8 +1210,8 @@ static int sb_check_sw_udp_seq_afinfo_fields(int cpu_id, const struct udp_seq_af
 /*
  * Check integrity of protocol function pointers.
  */
-static int sb_check_sw_proto_op_fields(int cpu_id, const struct proto_ops* op, const char*
-	obj_name)
+static int sb_check_sw_proto_op_fields(int cpu_id, const struct proto_ops* op,
+	const char* obj_name)
 {
 	int error = 0;
 
@@ -1276,13 +1250,51 @@ static int sb_check_sw_proto_op_fields(int cpu_id, const struct proto_ops* op, c
 	return 0;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)
+/*
+ * Get file_operations and seq_operations structures.
+ */
+static void sb_get_file_and_seq_ops(const void* i_node, int type,
+	struct file_operations** fops, struct seq_operations** sops)
+{
+	*fops = (struct file_operations*)(PDE(i_node)->proc_fops);
+	*sops = (struct seq_operations*)(PDE(i_node)->seq_ops);
+}
+
+#else /* LINUX_VERSION_CODE */
+
+/*
+ * Get file_operations and seq_operations structures.
+ */
+static void sb_get_file_and_seq_ops(const void* i_node, int type,
+	struct file_operations** fops, struct seq_operations** sops)
+{
+	struct tcp_seq_afinfo* tcp_afinfo = NULL;
+	struct udp_seq_afinfo* udp_afinfo = NULL;
+
+	if (type == SOCK_TYPE_TCP)
+	{
+		tcp_afinfo = (struct tcp_seq_afinfo*)PDE_DATA(i_node);
+		*fops = (struct file_operations*) tcp_afinfo->seq_fops;
+		*sops = (struct seq_operations*) &(tcp_afinfo->seq_ops);
+	}
+	else
+	{
+		udp_afinfo = (struct udp_seq_afinfo*)PDE_DATA(i_node);
+		*fops = (struct file_operations*) udp_afinfo->seq_fops;
+		*sops = (struct seq_operations*) &(udp_afinfo->seq_ops);
+	}
+}
+#endif /* LINUX_VERSION_CODE */
+
 /*
  * Check integrity of net function pointers.
  */
 static int sb_check_sw_net_object(int cpu_id)
 {
-	struct tcp_seq_afinfo* tcp_afinfo;
-	struct udp_seq_afinfo* udp_afinfo;
+	struct file_operations* seq_fops;
+	struct seq_operations* seq_sops;
+	void* d_inode;
 	int ret = 0;
 
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "Check Net Object\n");
@@ -1290,53 +1302,37 @@ static int sb_check_sw_net_object(int cpu_id)
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Check TCP Net Object\n");
 	if (g_tcp_file_ptr != NULL)
 	{
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
-		tcp_afinfo = (struct tcp_seq_afinfo*)
-			PDE_DATA(g_tcp_file_ptr->f_dentry->d_inode);
-#else
-		tcp_afinfo = (struct tcp_seq_afinfo*)
-			PDE_DATA(g_tcp_file_ptr->f_path.dentry->d_inode);
-#endif /* LINUX_VERSION_CODE */
-		ret |= sb_check_sw_tcp_seq_afinfo_fields(cpu_id, tcp_afinfo, "TCP Net");
+		d_inode = GET_D_INODE_FROM_FILE_PTR(g_tcp_file_ptr);
+		sb_get_file_and_seq_ops(d_inode, SOCK_TYPE_TCP, &seq_fops, &seq_sops);
+		ret |= sb_check_sw_net_seq_afinfo_fields(cpu_id, seq_fops, seq_sops,
+			"TCP Net");
 	}
 
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Check UDP Net Object\n");
 	if (g_udp_file_ptr != NULL)
 	{
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
-		udp_afinfo = (struct udp_seq_afinfo*)
-			PDE_DATA(g_udp_file_ptr->f_dentry->d_inode);
-#else
-		udp_afinfo = (struct udp_seq_afinfo*)
-			PDE_DATA(g_udp_file_ptr->f_path.dentry->d_inode);
-#endif /* LINUX_VERSION_CODE */
-		ret |= sb_check_sw_udp_seq_afinfo_fields(cpu_id, udp_afinfo, "UDP Net");
+		d_inode = GET_D_INODE_FROM_FILE_PTR(g_udp_file_ptr);
+		sb_get_file_and_seq_ops(d_inode, SOCK_TYPE_UDP, &seq_fops, &seq_sops);
+		ret |= sb_check_sw_net_seq_afinfo_fields(cpu_id, seq_fops, seq_sops,
+			"UDP Net");
 	}
 
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Check TCP6 Net Object\n");
 	if (g_tcp6_file_ptr != NULL)
 	{
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
-		tcp_afinfo = (struct tcp_seq_afinfo*)
-			PDE_DATA(g_tcp6_file_ptr->f_dentry->d_inode);
-#else
-		tcp_afinfo = (struct tcp_seq_afinfo*)
-			PDE_DATA(g_tcp6_file_ptr->f_path.dentry->d_inode);
-#endif /* LINUX_VERSION_CODE */
-		ret |= sb_check_sw_tcp_seq_afinfo_fields(cpu_id, tcp_afinfo, "TCP6 Net");
+		d_inode = GET_D_INODE_FROM_FILE_PTR(g_tcp6_file_ptr);
+		sb_get_file_and_seq_ops(d_inode, SOCK_TYPE_TCP, &seq_fops, &seq_sops);
+		ret |= sb_check_sw_net_seq_afinfo_fields(cpu_id, seq_fops, seq_sops,
+			"TCP6 Net");
 	}
 
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Check UDP6 Net Object\n");
 	if (g_udp6_file_ptr != NULL)
 	{
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
-		udp_afinfo = (struct udp_seq_afinfo*)
-			PDE_DATA(g_udp6_file_ptr->f_dentry->d_inode);
-#else
-		udp_afinfo = (struct udp_seq_afinfo*)
-			PDE_DATA(g_udp6_file_ptr->f_path.dentry->d_inode);
-#endif /* LINUX_VERSION_CODE */
-		ret |= sb_check_sw_udp_seq_afinfo_fields(cpu_id, udp_afinfo, "UDP6 Net");
+		d_inode = GET_D_INODE_FROM_FILE_PTR(g_udp6_file_ptr);
+		sb_get_file_and_seq_ops(d_inode, SOCK_TYPE_UDP, &seq_fops, &seq_sops);
+		ret |= sb_check_sw_net_seq_afinfo_fields(cpu_id, seq_fops, seq_sops,
+			"UDP6 Net");
 	}
 
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Check TCP Socket Object\n");

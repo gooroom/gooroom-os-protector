@@ -43,7 +43,8 @@ def get_symbol_table_from_file(filename):
 		"__end_rodata", 
 		"modules",
 		"tasklist_lock",
-		"init_level4_pgt",
+		"init_level4_pgt",	# under v4.13.0
+		"init_top_pgt",		# upper v4.13.0
 		"init_mm",
 		"wake_up_new_task",
 		"proc_flush_task",					
@@ -83,7 +84,9 @@ def get_symbol_table_from_file(filename):
 				symbol_table.append([data_item[2], data_item[0]])
 
 
-	if (found != len(symbol_list)):
+	# init_level4_pgt and init_top_pgt is same, so found variable is compared with
+	# len(symbol_list) - 1.
+	if (found != len(symbol_list) - 1):
 		print "    [WARNING] %s symbol find fail" % filename
 	else:
 		print "    [SUCCESS] %s symbol find success" % filename
