@@ -1795,128 +1795,6 @@ void sb_get_phy_from_log(u64 pml4_phy_addr, u64 addr, struct vm_page_entry_struc
 }
 
 /*
- * Syncronize page table with the guest to introspect it. V2
- * PML4 -> PDPTE_PD -> PDEPT -> PTE -> 4KB
- */
-u64 sb_sync_page_table2(u64 addr)
-{
-	struct sb_pagetable* pml4;
-	struct sb_pagetable* pdpte_pd;
-	struct sb_pagetable* pdept;
-	struct sb_pagetable* pte;
-	struct vm_page_entry_struct phy_entry;
-
-	u64 pml4_index;
-	u64 pdpte_pd_index;
-	u64 pdept_index;
-	u64 pte_index;
-	u64 value;
-	u64 expand_value = 0;
-
-	/* Skip direct mapping area */
-	if (((u64)page_offset_base <= addr) && (addr < (u64)page_offset_base + (64 * VAL_1TB)))
-	{
-		return 0;
-	}
-
-	/* Skip static kernel object area */
-	if (sb_is_addr_in_kernel_ro_area((void*)addr))
-	{
-		return 0;
-	}
-
-	pml4_index = (addr / VAL_512GB) % 512;
-	pdpte_pd_index = (addr / VAL_1GB) %  512;
-	pdept_index = (addr / VAL_2MB) %  512;
-	pte_index = (addr / VAL_4KB) %  512;
-
-	/* Get physical page by traversing page table of the guest. */
-	sb_get_phy_from_log(g_vm_init_phy_pml4, addr, &phy_entry);
-	if (!IS_PRESENT(phy_entry.phy_addr[3]))
-	{
-		return 0;
-	}
-
-	pml4 = phys_to_virt(g_vm_host_phy_pml4);
-
-	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "addr = %016lX PML4 index %ld %016lX "
-		"%016lX\n", addr, pml4_index, pml4, pml4->entry[pml4_index]);
-
-	/* Get PDPTE_PD from PML4 */
-	if (vm_is_new_page_table_needed(pml4, NULL, pml4_index) == 1)
-	{
-		value = vm_check_alloc_page_table(pml4, pml4_index);
-		vm_expand_page_table_entry(value, pml4->entry[pml4_index], VAL_1GB, 0);
-		pml4->entry[pml4_index] = GET_ADDR(value) | (phy_entry.phy_addr[0] &
-			MASK_PAGEFLAG);
-
-		sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "Expand Log %016lX Phy %016lX",
-			addr, (u64)virt_to_phys((void*)addr));
-
-		if (expand_value == 0)
-		{
-			expand_value = VAL_1GB;
-		}
-	}
-
-	pdpte_pd = phys_to_virt(GET_ADDR(pml4->entry[pml4_index]));
-
-	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "PDPTE_PD index %d %016lX %016lX\n",
-		pdpte_pd_index, pdpte_pd, pdpte_pd->entry[pdpte_pd_index]);
-
-	/* If PDEPT exist, syncronize the flag */
-	if (vm_is_new_page_table_needed(pdpte_pd, NULL, pdpte_pd_index) == 1)
-	{
-		value = vm_check_alloc_page_table(pdpte_pd, pdpte_pd_index);
-		vm_expand_page_table_entry(value, pdpte_pd->entry[pdpte_pd_index],
-			VAL_2MB, 0);
-		pdpte_pd->entry[pdpte_pd_index] = GET_ADDR(value) |
-			(phy_entry.phy_addr[1] & MASK_PAGEFLAG);
-
-		sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "Expand Log %016lX Phy %016lX",
-			addr, (u64)virt_to_phys((void*)addr));
-
-		if (expand_value == 0)
-		{
-			expand_value = VAL_2MB;
-		}
-	}
-
-	pdept = phys_to_virt(GET_ADDR(pdpte_pd->entry[pdpte_pd_index]));
-
-	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "PDEPT index %d %016lX %016lX\n",
-		pdept_index, pdept, pdept->entry[pdept_index]);
-
-	/* If PTE exist, syncronize the flag */
-	if (vm_is_new_page_table_needed(pdept, NULL, pdept_index) == 1)
-	{
-		value = vm_check_alloc_page_table(pdept, pdept_index);
-		vm_expand_page_table_entry(value, pdept->entry[pdept_index], VAL_4KB, 0);
-		pdept->entry[pdept_index] = GET_ADDR(value) |
-			(phy_entry.phy_addr[2] & MASK_PAGEFLAG);
-
-		sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "Expand Log %016lX Phy %016lX",
-			addr, (u64)virt_to_phys((void*)addr));
-
-		if (expand_value == 0)
-		{
-			expand_value = VAL_4KB;
-		}
-	}
-
-	pte = phys_to_virt(GET_ADDR(pdept->entry[pdept_index]));
-	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "PTE index %d %016lX %016lX\n",
-		pte_index, pte, pte->entry[pte_index]);
-
-	/* Copy PTE from the guest */
-	pte->entry[pte_index] = phy_entry.phy_addr[3];
-
-	/* Update page table to CPU */
-	sb_set_cr3(g_vm_host_phy_pml4);
-	return expand_value;
-}
-
-/*
  * Syncronize page table with the guest to introspect it. V1
  * PML4 -> PDPTE_PD -> PDEPT -> PTE -> 4KB
  */
@@ -1979,18 +1857,17 @@ u64 sb_sync_page_table(u64 addr)
 	{
 		vm_pml4->entry[pml4_index] = (u64)init_pdpte_pd;
 
+#if SHADOWBOX_USE_PAGE_DEBUG
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "===================INFO======================");
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "PML4 addr = %016lX sync\n", addr);
+		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "PDPTE_PD has size flags or 0\n");
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "===================INFO======================");
 
-		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "PDPTE_PD has size flags or 0\n");
-
-#if SHADOWBOX_USE_PAGE_DEBUG
 		while(1)
 		{
 			sb_pause_loop();
 		}
-#endif
+#endif /* SHADOWBOX_USE_PAGE_DEBUG */
 		goto EXIT;
 	}
 
@@ -2001,19 +1878,20 @@ u64 sb_sync_page_table(u64 addr)
 			init_pml4->entry[pml4_index]);
 		sb_sync_page_table_flag(vm_pml4, init_pml4, pml4_index, value);
 
-		sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "New table is needed. Expand Log "
-			"%016lX Phy %016lX", addr, (u64)virt_to_phys((void*)addr));
 		if (expand_value == 0)
 		{
 			expand_value = VAL_1GB;
 		}
 
 #if SHADOWBOX_USE_PAGE_DEBUG
+		sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "New table is needed. Expand Log "
+			"%016lX Phy %016lX", addr, (u64)virt_to_phys((void*)addr));
+
 		while(1)
 		{
 			sb_pause_loop();
 		}
-#endif
+#endif /* SHADOWBOX_USE_PAGE_DEBUG */
 	}
 
 	init_pdpte_pd = phys_to_virt((u64)init_pdpte_pd & ~(MASK_PAGEFLAG));
@@ -2021,7 +1899,7 @@ u64 sb_sync_page_table(u64 addr)
 	vm_pdpte_pd = phys_to_virt((u64)vm_pdpte_pd & ~(MASK_PAGEFLAG));
 
 	/*
-	 * Get PDEPT from PDPTE_PD
+	 * Get PDEPT from PDPTE_PD.
 	 */
 	init_pdept = (struct sb_pagetable*)(init_pdpte_pd->entry[pdpte_pd_index]);
 
@@ -2033,30 +1911,26 @@ u64 sb_sync_page_table(u64 addr)
 	{
 		if (vm_pdpte_pd->entry[pdpte_pd_index] != (u64)init_pdept)
 		{
-			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "===================INFO======================");
-			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "PDEPT addr = %016lX sync\n", addr);
-			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "===================INFO======================");
-		}
-		else
-		{
-			sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "PDEPT is same");
-		}
-
-		vm_pdpte_pd->entry[pdpte_pd_index] = (u64)init_pdept;
-
-		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "PDEPT has size flags or 0\n");
+			vm_pdpte_pd->entry[pdpte_pd_index] = (u64)init_pdept;
 
 #if SHADOWBOX_USE_PAGE_DEBUG
-		while(1)
-		{
-			sb_pause_loop();
+			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "===================INFO======================");
+			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "PDEPT addr = %016lX sync\n", addr);
+			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "PDEPT has size flags or 0, Logical %016lX, "
+				"Physical %016lX\n", addr, init_pdept);
+			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "===================INFO======================");
+
+			while(1)
+			{
+				sb_pause_loop();
+			}
+#endif /* SHADOWBOX_USE_PAGE_DEBUG */
 		}
-#endif
 
 		goto EXIT;
 	}
 
-	/* If PDEPT exist, syncronize the flag */
+	/* If PDEPT exist, syncronize the flag. */
 	if (vm_is_new_page_table_needed(vm_pdpte_pd, init_pdpte_pd, pdpte_pd_index) == 1)
 	{
 		value = vm_check_alloc_page_table(vm_pdpte_pd, pdpte_pd_index);
@@ -2064,20 +1938,20 @@ u64 sb_sync_page_table(u64 addr)
 			VAL_2MB, init_pdpte_pd->entry[pdpte_pd_index]);
 		sb_sync_page_table_flag(vm_pdpte_pd, init_pdpte_pd, pdpte_pd_index, value);
 
-		sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "New PDEPT is needed. Expand Log "
-			"%016lX Phy %016lX", addr, (u64)virt_to_phys((void*)addr));
-
 		if (expand_value == 0)
 		{
 			expand_value = VAL_2MB;
 		}
 
 #if SHADOWBOX_USE_PAGE_DEBUG
+		sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "New PDEPT is needed. Expand Log "
+			"%016lX Phy %016lX", addr, (u64)virt_to_phys((void*)addr));
+
 		while(1)
 		{
 			sb_pause_loop();
 		}
-#endif
+#endif /* SHADOWBOX_USE_PAGE_DEBUG */
 	}
 
 	init_pdept = phys_to_virt((u64)init_pdept & ~(MASK_PAGEFLAG));
@@ -2085,7 +1959,7 @@ u64 sb_sync_page_table(u64 addr)
 	vm_pdept = phys_to_virt((u64)vm_pdept & ~(MASK_PAGEFLAG));
 
 	/*
-	 * Get PTE from PDPTE_PD
+	 * Get PTE from PDPTE_PD.
 	 */
 	init_pte = (struct sb_pagetable*)(init_pdept->entry[pdept_index]);
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "PDEPT index %d %016lX %016lX %016lX\n", pdept_index, vm_pdept, init_pdept, init_pdept->entry[pdept_index]);
@@ -2094,30 +1968,26 @@ u64 sb_sync_page_table(u64 addr)
 	{
 		if (vm_pdept->entry[pdept_index] != (u64)init_pte)
 		{
-			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "===================INFO======================");
-			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "PDEPT addr = %016lX sync\n", addr);
-			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "===================INFO======================");
-		}
-		else
-		{
-			sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "PDEPT is same");
-		}
-
-		vm_pdept->entry[pdept_index] = (u64)init_pte;
-
-		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "PTE has size flags or 0\n");
+			vm_pdept->entry[pdept_index] = (u64)init_pte;
 
 #if SHADOWBOX_USE_PAGE_DEBUG
-		while(1)
-		{
-			sb_pause_loop();
+			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "===================INFO======================");
+			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "PDEPT addr = %016lX sync\n", addr);
+			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "PDEPT has size flags or 0, Logical %016lX, "
+				"Physical %016lX\n", addr, init_pdept);
+			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "===================INFO======================");
+
+			while(1)
+			{
+				sb_pause_loop();
+			}
+#endif /* SHADOWBOX_USE_PAGE_DEBUG */
 		}
-#endif
 
 		goto EXIT;
 	}
 
-	/* If PTE exist, syncronize the flag */
+	/* If PTE exist, syncronize the flag. */
 	if (vm_is_new_page_table_needed(vm_pdept, init_pdept, pdept_index) == 1)
 	{
 		value = vm_check_alloc_page_table(vm_pdept, pdept_index);
@@ -2125,32 +1995,31 @@ u64 sb_sync_page_table(u64 addr)
 			init_pdept->entry[pdept_index]);
 		sb_sync_page_table_flag(vm_pdept, init_pdept, pdept_index, value);
 
-		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "New PTE is needed. Expand Log "
-			"%016lX Phy %016lX", addr, (u64)virt_to_phys((void*)addr));
-
 		if (expand_value == 0)
 		{
 			expand_value = VAL_4KB;
 		}
 
 #if SHADOWBOX_USE_PAGE_DEBUG
+		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "New PTE is needed. Expand Log "
+			"%016lX Phy %016lX", addr, (u64)virt_to_phys((void*)addr));
+
 		while(1)
 		{
 			sb_pause_loop();
 		}
-#endif
+#endif /* SHADOWBOX_USE_PAGE_DEBUG */
 
 	}
 	init_pte = phys_to_virt((u64)init_pte & ~(MASK_PAGEFLAG));
 	vm_pte = (struct sb_pagetable*)(vm_pdept->entry[pdept_index]);
 
-	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "PTE index %d Physical %016lX %016lX\n",
-		pte_index, vm_pte, init_pte);
 	vm_pte = phys_to_virt((u64)vm_pte & ~(MASK_PAGEFLAG));
+
+#if SHADOWBOX_USE_PAGE_DEBUG
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "PTE index %d %016lX %016lX %016lX\n",
 		pte_index, vm_pte, init_pte, init_pte->entry[pte_index]);
 
-	/* Copy PTE from the guest */
 	if (vm_pte->entry[pte_index] != init_pte->entry[pte_index])
 	{
 		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "===================INFO======================");
@@ -2164,7 +2033,6 @@ u64 sb_sync_page_table(u64 addr)
 		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "PTE is same");
 	}
 
-#if SHADOWBOX_USE_PAGE_DEBUG
 	if (init_pte->entry[pte_index] != phy_entry.phy_addr[3])
 	{
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "===================INFO======================");
@@ -2178,13 +2046,14 @@ u64 sb_sync_page_table(u64 addr)
 			sb_pause_loop();
 		}
 	}
-#endif
+#endif /* SHADOWBOX_USE_PAGE_DEBUG */
 
+	/* Copy PTE from the guest. */
 	vm_pte->entry[pte_index] = init_pte->entry[pte_index];
 
 EXIT:
 
-	/* Update page table to CPU */
+	/* Update page table to CPU. */
 	sb_set_cr3(g_vm_host_phy_pml4);
 	return expand_value;
 }
@@ -2293,7 +2162,7 @@ static void sb_dup_page_table_for_host(int reinitialize)
 			vm_pdpte_pd->entry[j] = virt_to_phys((void*)(vm_pdpte_pd->entry[j]));
 			vm_pdpte_pd->entry[j] |= org_pdpte_pd->entry[j] & MASK_PAGEFLAG;
 
-			/* Run loop to copy PDEPT */
+			/* Run loop to copy PDEPT. */
 			org_pdept = (struct sb_pagetable*)(org_pdpte_pd->entry[j] & ~(MASK_PAGEFLAG));
 			vm_pdept = (struct sb_pagetable*)(vm_pdpte_pd->entry[j] & ~(MASK_PAGEFLAG));
 			org_pdept = phys_to_virt((u64)org_pdept);
@@ -3534,6 +3403,9 @@ static void sb_vm_exit_callback_vmcall(int cpu_id, struct sb_vm_exit_guest_regis
 	sb_read_vmcs(VM_GUEST_CS_SELECTOR, &cs_selector);
 	if ((cs_selector & MASK_GDT_ACCESS) != 0)
 	{
+		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] VMCALL index[%ld] is not allowed\n",
+			cpu_id);
+		sb_insert_exception_to_vm();
 		sb_advance_vm_guest_rip();
 		return ;
 	}
@@ -3666,7 +3538,7 @@ static void sb_restore_context_from_vm_guest(int cpu_id, struct sb_vm_full_conte
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] rip %016lX, %016lX\n", cpu_id,
 		full_context->rip, sb_vm_thread_shutdown);
 
-	/* Copy context to stack and restore */
+	/* Copy context to stack and restore. */
 	target_addr = guest_rsp - sizeof(struct sb_vm_full_context);
 	memcpy((void*)target_addr, full_context, sizeof(struct sb_vm_full_context));
 
@@ -3681,7 +3553,7 @@ static int sb_system_reboot_notify(struct notifier_block *nb, unsigned long code
 {
 	int cpu_count;
 
-	/* Call Shadow-box shutdown function */
+	/* Call Shadow-box shutdown function. */
 	sb_vm_call(VM_SERVICE_SHUTDOWN, NULL);
 
 	cpu_count = num_online_cpus();
