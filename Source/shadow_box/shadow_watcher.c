@@ -912,11 +912,7 @@ static void sb_copy_module_list_to_sw_module_manager(void)
 	{
 		mod = container_of(pos, struct module, list);
 
-		if (mod == THIS_MODULE)
-		{
-			continue;
-		}
-		else if (strcmp(mod->name, HELPER_MODULE_NAME) == 0)
+		if (strcmp(mod->name, HELPER_MODULE_NAME) == 0)
 		{
 			g_helper_module = mod;
 		}
