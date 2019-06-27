@@ -1,3 +1,12 @@
+gooroom-os-protector (2.2.1+4.9.168~1+deb9u3+grm1u1) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [a6828870] Released kernel version to 4.9.168-1+deb9u3+grm1u1
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Thu, 27 Jun 2019 15:22:55 +0900
+
 gooroom-os-protector (2.2.1+4.9.110~3+deb9u6+grm1u2) stable; urgency=medium
 
   [ Seunghun Han ]
