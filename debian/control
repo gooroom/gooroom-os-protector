@@ -8,7 +8,7 @@ Standards-Version: 3.9.6
 
 Package: gooroom-os-protector
 Architecture: amd64
-Depends: linux-image-4.19.0-5-amd64 (= 4.19.37-5+grm2u1)
+Depends: linux-image-4.19.0-5-amd64 (= 4.19.37-5+deb10u1+grm2u1)
 Description: Gooroom OS Protector
  Gooroom OS Protector protects the Gooroom kernel and drivers.
  It supports Gooroom kernel version from 3.x.x to 4.x.x.
