@@ -1,3 +1,13 @@
+gooroom-os-protector (2.3.1+4.19.67~2+deb10u2+grm2u1) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [a16e1b71] Released 2.3.1+4.19.67_2+deb10u2+grm2u1
+  * [09bc2544] Run update-grub if gooroom-boot-protector is not installed
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Fri, 15 Nov 2019 20:28:42 +0900
+
 gooroom-os-protector (2.3.1+4.19.67~2+deb10u1+grm2u3) stable; urgency=medium
 
   [ jongkyung.woo ]
