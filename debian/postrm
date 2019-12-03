@@ -1,0 +1,13 @@
+#!/bin/bash
+# Enable interrupt remapping if Gooroom Boot Protector is not installed
+service gbp-daemon status > /dev/null
+ret=$?
+if [ \( $ret -ne 0 \) -a \( $ret -ne 3 \) ]; then
+	sed -i 's/intremap=off //g' /etc/default/grub
+	sed -i 's/pti=off //g' /etc/default/grub
+	update-grub
+fi
+
+# Enable hibernate and suspend function in systemd config to support notebook
+sed -i 's/HandleSuspendKey=ignore/#HandleSuspendKey=suspend/; s/HandleHibernateKey=ignore/#HandleHibernateKey=hibernate/; s/HandleLidSwitch=ignore/#HandleLidSwitch=suspend/' /etc/systemd/logind.conf
+sed -i 's/xserver-command=X -s 0 dpms/#xserver-command=X/' /etc/lightdm/lightdm.conf

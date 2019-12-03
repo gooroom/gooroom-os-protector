@@ -1,0 +1,42 @@
+#!/usr/bin/make -f
+
+export DEB_CFLAGS_SET=-O2
+
+DHFLAGS=--parallel
+
+UNAME_R=4.19.0-6-amd64
+UNAME_V=\#1 SMP gooroom 4.19.67-2+deb10u2+grm2u1 (2019-11-15)
+
+%:
+	dh $@ --with dkms $(DHFLAGS)
+
+override_dh_auto_clean:
+	dh_auto_clean
+
+	sed -i -e 's@`uname -r`@${UNAME_R}@g' $(CURDIR)/Source/Makefile
+	sed -i -e 's@`uname -v`@${UNAME_V}@g' $(CURDIR)/Source/Makefile
+	sed -i -e 's@KVERSION =.*@KVERSION = ${UNAME_R}@g' $(CURDIR)/Source/shadow_box/Makefile
+	sed -i -e 's@KVERSION =.*@KVERSION = ${UNAME_R}@g' $(CURDIR)/Source/shadow_box_helper/Makefile
+
+override_dh_auto_configure:
+	dh_auto_configure
+
+	sed -i -e 's@`uname -r`@${UNAME_R}@g' $(CURDIR)/Source/Makefile
+	sed -i -e 's@`uname -v`@${UNAME_V}@g' $(CURDIR)/Source/Makefile
+	sed -i -e 's@KVERSION =.*@KVERSION = ${UNAME_R}@g' $(CURDIR)/Source/shadow_box/Makefile
+	sed -i -e 's@KVERSION =.*@KVERSION = ${UNAME_R}@g' $(CURDIR)/Source/shadow_box_helper/Makefile
+
+override_dh_install:
+	make -C Source
+	dh_install --fail-missing
+
+override_dh_builddeb:
+	dh_builddeb -- -Zxz -z9
+
+override_dh_clean:
+	make -C Source clean
+	dh_clean
+
+override_dh_usrlocal:
+	# remove this override when there aren't
+	# anymore files in /usr/local
