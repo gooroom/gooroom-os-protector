@@ -1,0 +1,228 @@
+gooroom-os-protector (2.3.1+4.19.67~2+deb10u2+grm2u1) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [a16e1b71] Released 2.3.1+4.19.67_2+deb10u2+grm2u1
+  * [09bc2544] Run update-grub if gooroom-boot-protector is not installed
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Fri, 15 Nov 2019 20:28:42 +0900
+
+gooroom-os-protector (2.3.1+4.19.67~2+deb10u1+grm2u3) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [749efdb4] Released 2.3.1+4.19.67_2+deb10u1+grm2u3
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Fri, 08 Nov 2019 17:33:09 +0900
+
+gooroom-os-protector (2.3.1+4.19.67~2+deb10u1+grm2u2) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [6750cb2a] Released 2.3.1+4.19.67_2+deb10u1+grm2u2
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Wed, 23 Oct 2019 11:48:28 +0900
+
+gooroom-os-protector (2.3.1+4.19.67~2+deb10u1+grm2u1) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [7a1f6a1b] Released 2.3.1+4.19.67_2+deb10u1+grm2u1
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Fri, 11 Oct 2019 16:23:56 +0900
+
+gooroom-os-protector (2.3.1+4.19.37~5+deb10u1+grm2u1) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [e7cc5a3c] Released 2.3.1+4.19.37_5+deb10u1+grm2u1
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Thu, 25 Jul 2019 19:01:25 +0900
+
+gooroom-os-protector (2.3.0+4.19.37~5+grm2u1) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [4007d98b] Change the page table synchronization feature
+  * [e99c9a7c] Enable an i915 workaround feature
+  * [2062d089] Fix a module count check bug
+  * [7221c427] Change a module-lock algorithm
+  * [f3f30ee0] Add a newline at the end of a message
+  * [9d68e29a] Update data structures and code to support kernel v4.19
+
+  [ jongkyung.woo ]
+  * [245e6720] Released 2.3.0+4.19.37-5+grm2u1
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Thu, 18 Jul 2019 17:35:13 +0900
+
+gooroom-os-protector (2.2.1+4.9.110~3+deb9u6+grm1u2) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [b4dbae48] Change license
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Tue, 30 Apr 2019 13:45:36 +0900
+
+gooroom-os-protector (2.2.0+4.9.110~3+deb9u6+grm1u2) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [fb6ef5bd] Add a power management feature and change log formats
+
+  [ jongkyung.woo ]
+  * [e12f9032] Release kernel version to 4.9.110-3+deb9u6+grm1u2
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Sun, 25 Nov 2018 12:12:24 +0900
+
+gooroom-os-protector (2.1.0+4.9.110~3+deb9u4+grm1u1) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [353a2f62] Release kernel version to 4.9.110-3+deb9u4+grm1u1
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Wed, 22 Aug 2018 15:27:09 +0900
+
+gooroom-os-protector (2.1.0+4.9.82~1+deb9u3+grm1u1) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [2656e4b4] Add sleep feature
+  * [35c49fbe] Fix gop-daemon hang bug
+  * [ae9943ff] Update version number
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Wed, 04 Jul 2018 06:04:19 +0900
+
+gooroom-os-protector (2.0.1+4.9.82~1+deb9u3+grm1u1) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [45b17445] Add the privilege control feature to VMCALL and delete log
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Tue, 24 Apr 2018 14:08:37 +0900
+
+gooroom-os-protector (2.0.0+4.9.82~1+deb9u3+grm1u2) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [aa93961e] Romove pti=off parameter at version 2.0.0
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Mon, 16 Apr 2018 18:06:36 +0900
+
+gooroom-os-protector (2.0.0+4.9.82~1+deb9u3+grm1u1) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [b46abe6b] Add Page Table Isolation (PTI, a.k.a KAISER) support feature
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Mon, 16 Apr 2018 18:02:12 +0900
+
+gooroom-os-protector (1.8.3+4.9.82~1+deb9u3+grm1u5) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [83b024a4] [Bugfix] Added a space at the end of the pti=off parameter
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Wed, 28 Mar 2018 14:37:17 +0900
+
+gooroom-os-protector (1.8.3+4.9.82~1+deb9u3+grm1u4) stable; urgency=medium
+
+  * UNRELEASED
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Wed, 28 Mar 2018 14:32:58 +0900
+
+gooroom-os-protector (1.8.3+4.9.82~1+deb9u3+grm1u3) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [5e22ec32] Added pti=off parameter as an emergency patch for the os-protector
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Mon, 19 Mar 2018 16:16:35 +0900
+
+gooroom-os-protector (1.8.3+4.9.82~1+deb9u3+grm1u2) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [4dc237d6] [bugfix] Fixed UNAME_R in rules
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Fri, 16 Mar 2018 12:31:17 +0900
+
+gooroom-os-protector (1.8.3+4.9.82~1+deb9u3+grm1u1) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [384c352e] Released 4.9.82-1+deb9u3+grm1u1 (4.9.0-6-amd64)
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Thu, 08 Mar 2018 12:40:11 +0900
+
+gooroom-os-protector (1.8.3+4.9.65~3+deb9u2+grm1u1) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [b746777a] Add a Machine Check Handling Feature
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Mon, 05 Mar 2018 15:04:21 +0900
+
+gooroom-os-protector (1.8.2+4.9.65~3+deb9u2+grm1u1) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [af39fcc2] Disabling sleep function of Lightdm
+
+  [ jongkyung.woo ]
+  * [b3ed7fc2] Released 4.9.65-3+deb9u2+grm1u1 (4.9.0-5-amd64)
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Wed, 17 Jan 2018 13:35:22 +0900
+
+gooroom-os-protector (1.8.1+4.9.30~2+deb9u2+grm1u2) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [4056e827] Add log data when Shadow-box detects GDT/IDT attack
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Sun, 03 Dec 2017 10:07:14 +0900
+
+gooroom-os-protector (1.8.1+4.9.30~2+deb9u2+grm1u1) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [d9441cc5] Processes in the control file when installing kernel dependencies in rules
+  * [41fbbbac] Released 4.9.30-2+deb9u5+grm1u1
+
+  [ Seunghun Han ]
+  * [59374e1e] Remove unused files and change vm-timer
+  * [aa0ca7df] fix an invalid directory bug
+  * [a47e0b14] fix a service restart bug and add a cr0 wp bit recovery feature
+  * [cf482a70] fix a run status bug and add a VT-x status check of BIOS
+  * [7da906ad] Change loading time of Shadow-box
+  * [5483d124] Change delay time to support ath10k driver
+  * [5a3d2e1f] Remove potential security vulnerabilities
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Thu, 16 Nov 2017 18:11:10 +0900
+
+gooroom-os-protector (1.8.0) stable; urgency=medium
+
+  * Initial Release
+
+ -- gooroom <gooroom@gooroom.kr>  Tue, 01 Aug 2017 19:47:12 +0900
+

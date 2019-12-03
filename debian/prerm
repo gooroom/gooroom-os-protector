@@ -1,0 +1,5 @@
+#!/bin/bash
+
+# Uninstall daemon
+update-rc.d gop-daemon remove
+rm /etc/init.d/gop-daemon

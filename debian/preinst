@@ -1,0 +1,8 @@
+#!/bin/bash
+echo "Preinstall..."
+
+# bugfix the 1.8.3+4.9.82-1+deb9u3+grm1u3 version
+cat /etc/default/grub | grep -q 'pti=offquiet'
+if [ $? -eq 0 ]; then
+  sed -i 's/pti=offquiet/quiet/g' /etc/default/grub
+fi
