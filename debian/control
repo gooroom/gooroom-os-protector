@@ -11,7 +11,7 @@ Vcs-Browser: https://github.com/gooroom/gooroom-os-protector
 
 Package: gooroom-os-protector
 Architecture: amd64
-Depends: linux-image-4.19.0-6-amd64 (= 4.19.67-2+deb10u2+grm2u1)
+Depends: linux-image-4.19.0-6-amd64 (= 4.19.67-2+deb10u2+grm2u2)
 Description: Gooroom OS Protector
  Gooroom OS Protector protects the Gooroom kernel and drivers.
  It supports Gooroom kernel version from 3.x.x to 4.x.x.
