@@ -1,3 +1,13 @@
+gooroom-os-protector (2.4.0+4.19.67~2+deb10u2+grm2u2) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [48fed67e] Add extra modules protection feature
+  * [016c8382] Add extra paddings to protect shadow-box data from Module structure
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Thu, 02 Apr 2020 15:35:49 +0900
+
 gooroom-os-protector (2.3.1+4.19.67~2+deb10u2+grm2u2) stable; urgency=medium
 
   [ jongkyung.woo ]
