@@ -188,7 +188,7 @@ static int sbh_log_thread(void* argument)
 			if (buffer[i] == '\n')
 			{
 				buffer[i] = '\0';
-				printk("%s", buffer);
+				printk("%s\n", buffer);
 
 				/* Calculate new index. */
 				copy_bytes = end - (i + 1);

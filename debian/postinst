@@ -7,9 +7,14 @@ update-rc.d gop-daemon defaults
 # Disable interrupt remapping to reserve IOMMU if Gooroom Boot Protector is not installed
 service gbp-daemon status > /dev/null
 ret=$?
-if [ \( $ret -ne 0 \) -a \( $ret -ne 3 \) ]; then
-	sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=\"/GRUB_CMDLINE_LINUX_DEFAULT=\"intremap=off /' /etc/default/grub
-	update-grub
+
+# Run update-grub if gooroom-boot-protector is not installed
+dpkg -l | grep -q gooroom-boot-protector
+if [ $? -ne 0 ]; then
+    if [ \( $ret -ne 0 \) -a \( $ret -ne 3 \) ]; then
+    	sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=\"/GRUB_CMDLINE_LINUX_DEFAULT=\"intremap=off /' /etc/default/grub
+    	update-grub
+    fi
 fi
 
 # Delete previous plka file
