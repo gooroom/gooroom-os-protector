@@ -27,6 +27,11 @@
 /*
  * Variables.
  */
+/*
+ * Set buffer to protect Shadow-box data section from module structure.
+ * 	Module structure is in front of data section and is not aligned by 4KB.
+ */
+char sb_dummy_buffer_for_4KB_align[0x2000] = {0, };
 struct sb_ept_info g_ept_info = {0,};
 static u64 g_ram_end;
 
