@@ -1,3 +1,40 @@
+gooroom-os-protector (2.4.0+4.9.189~3+deb9u1+grm1u1) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [4007d98b] Change the page table synchronization feature
+  * [e99c9a7c] Enable an i915 workaround feature
+  * [2062d089] Fix a module count check bug
+  * [7221c427] Change a module-lock algorithm
+  * [f3f30ee0] Add a newline at the end of a message
+  * [9d68e29a] Update data structures and code to support kernel v4.19
+  * [48fed67e] Add extra modules protection feature
+  * [016c8382] Add extra paddings to protect shadow-box data from Module structure
+
+  [ jongkyung.woo ]
+  * [245e6720] Released 2.3.0+4.19.37-5+grm2u1
+  * [e7cc5a3c] Released 2.3.1+4.19.37_5+deb10u1+grm2u1
+  * [c10000e0] Released 2.3.1+4.19.37_5+deb10u2+grm2u1
+  * [7a1f6a1b] Released 2.3.1+4.19.67_2+deb10u1+grm2u1
+  * [6750cb2a] Released 2.3.1+4.19.67_2+deb10u1+grm2u2
+  * [749efdb4] Released 2.3.1+4.19.67_2+deb10u1+grm2u3
+  * [a16e1b71] Released 2.3.1+4.19.67_2+deb10u2+grm2u1
+  * [09bc2544] Run update-grub if gooroom-boot-protector is not installed
+  * [274f3947] Released 2.3.1+4.19.67-2+deb10u2+grm2u2
+
+  [ jenkins ]
+  * [bdd83f9c] Version 2.3.0+4.19.37~5+grm2u1 released
+  * [b849da4a] Version 2.3.1+4.19.37~5+deb10u1+grm2u1 released
+  * [af605550] Version 2.3.1+4.19.67~2+deb10u1+grm2u1 released
+  * [055375bc] Version 2.3.1+4.19.67~2+deb10u1+grm2u2 released
+  * [55e614ab] Version 2.3.1+4.19.67~2+deb10u1+grm2u3 released
+  * [bcecf0c9] Version 2.3.1+4.19.67~2+deb10u2+grm2u1 released
+  * [04914921] Version 2.3.1+4.19.67~2+deb10u2+grm2u2 released
+  * [43e927f4] Version 2.4.0+4.19.67~2+deb10u2+grm2u2 released
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Fri, 03 Apr 2020 02:22:18 +0900
+
 gooroom-os-protector (2.2.1+4.9.189~3+deb9u1+grm1u1) stable; urgency=medium
 
   [ jongkyung.woo ]
