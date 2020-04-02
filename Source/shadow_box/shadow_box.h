@@ -16,7 +16,7 @@
 /*
  * Macros.
  */
-#define SHADOWBOX_VERSION				"2.3.0"
+#define SHADOWBOX_VERSION				"2.4.0"
 
 /* Feature list of Shadow-box. */
 /*
@@ -46,7 +46,10 @@
 #define SHADOWBOX_USE_PRE_SYMBOL		1
 #define SHADOWBOX_USE_I915_WORKAROUND	1
 #define SHADOWBOX_USE_SLEEP				1
-#define SHADOWBOX_USE_VPID				0
+
+/* These features are options. */
+#define SHADOWBOX_USE_VPID						0
+#define SHADOWBOX_USE_EXTRA_MODULE_PROTECTION	1
 
 /*
  * Debug macros.
@@ -808,5 +811,15 @@ void sb_insert_exception_to_vm(void);
 void sb_vm_exit_callback(struct sb_vm_exit_guest_register* guest_context);
 u64 sb_get_symbol_address(char* symbol);
 void sb_reboot(void);
+void sb_add_and_protect_module_ro(struct module* mod);
+void sb_delete_and_unprotect_module_ro(u64 mod_core_base, u64 mod_core_ro_size);
+u64 sb_get_module_init_base(struct module *mod);
+u64 sb_get_module_init_size(struct module *mod);
+u64 sb_get_module_init_text_size(struct module *mod);
+u64 sb_get_module_init_ro_size(struct module *mod);
+u64 sb_get_module_core_base(struct module *mod);
+u64 sb_get_module_core_size(struct module *mod);
+u64 sb_get_module_core_text_size(struct module *mod);
+u64 sb_get_module_core_ro_size(struct module *mod);
 
 #endif

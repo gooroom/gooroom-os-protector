@@ -48,8 +48,8 @@ def get_symbol_table_from_file(filename):
 		"init_mm",
 		"wake_up_new_task",
 		"proc_flush_task",					
-		"ftrace_module_init",
-		"free_module",
+		"do_init_module",
+		"module_bug_cleanup",
 		"walk_system_ram_range",
 
 		"logbuf_lock",

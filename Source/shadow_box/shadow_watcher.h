@@ -46,6 +46,8 @@ struct sb_module_node
 	struct list_head list;
 	struct module* module;
 	int protect;
+	u64 base;
+	u64 size;
 	char name[MODULE_NAME_LEN];
 };
 

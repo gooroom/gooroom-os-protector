@@ -96,6 +96,7 @@ atomic_t g_iommu_complete_flags;
 atomic_t g_mutex_lock_flags;
 u64 g_vm_pri_proc_based_ctrl_default = 0;
 static spinlock_t g_mem_pool_lock;
+static spinlock_t g_mem_sync_lock;
 
 /* Variables for checking dynamic kernel objects. */
 struct list_head* g_modules_ptr = NULL;
@@ -1007,6 +1008,7 @@ static int sb_setup_memory_pool(void)
 	u64 size;
 
 	spin_lock_init(&g_mem_pool_lock);
+	spin_lock_init(&g_mem_sync_lock);
 
 	/* Allocate 1 page per 2MB */
 	g_memory_pool.max_count = g_max_ram_size / VAL_2MB;
@@ -1288,11 +1290,95 @@ static void sb_protect_kernel_ro_area(void)
 
 	sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "    [*] Complete\n");
 }
+/*
+ *	Get module data from a module structure.
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
+u64 sb_get_module_init_base(struct module *mod)
+{
+	return (u64)mod->module_init;
+}
+
+u64 sb_get_module_init_size(struct module *mod)
+{
+	return (u64)mod->init_size;
+}
+
+u64 sb_get_module_init_text_size(struct module *mod)
+{
+	return (u64)mod->init_text_size;
+}
+
+u64 sb_get_module_init_ro_size(struct module *mod)
+{
+	return (u64)mod->init_ro_size;
+}
+
+u64 sb_get_module_core_base(struct module *mod)
+{
+	return (u64)mod->module_core;
+}
+
+u64 sb_get_module_core_size(struct module *mod)
+{
+	return (u64)mod->core_size;
+}
+
+u64 sb_get_module_core_text_size(struct module *mod)
+{
+	return (u64)mod->core_text_size;
+}
+
+u64 sb_get_module_core_ro_size(struct module *mod)
+{
+	return (u64)mod->core_ro_size;
+}
+#else
+u64 sb_get_module_init_base(struct module *mod)
+{
+	return (u64)(mod->init_layout.base);
+}
+
+u64 sb_get_module_init_size(struct module *mod)
+{
+	return (u64)(mod->init_layout.size);
+}
+
+u64 sb_get_module_init_text_size(struct module *mod)
+{
+	return (u64)(mod->init_layout.text_size);
+}
+
+u64 sb_get_module_init_ro_size(struct module *mod)
+{
+	return (u64)(mod->init_layout.ro_size);
+}
+
+u64 sb_get_module_core_base(struct module *mod)
+{
+	return (u64)(mod->core_layout.base);
+}
+
+u64 sb_get_module_core_size(struct module *mod)
+{
+	return (u64)(mod->core_layout.size);
+}
+
+u64 sb_get_module_core_text_size(struct module *mod)
+{
+	return (u64)(mod->core_layout.text_size);
+}
+
+u64 sb_get_module_core_ro_size(struct module *mod)
+{
+	return (u64)(mod->core_layout.ro_size);
+}
+#endif /* LINUX_VERSION_CODE */
 
 /*
  * Protect static kernel object of the module using locking and hiding.
  */
-static void sb_add_and_protect_module_ro(struct module* mod)
+void sb_add_and_protect_module_ro(struct module* mod)
 {
 	u64 mod_init_base;
 	u64 mod_init_size;
@@ -1303,30 +1389,19 @@ static void sb_add_and_protect_module_ro(struct module* mod)
 	u64 mod_core_text_size;
 	u64 mod_core_ro_size;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
-	mod_init_base = (u64)mod->module_init;
-	mod_init_size = (u64)mod->init_size;
-	mod_init_text_size = (u64)mod->init_text_size;
-	mod_init_ro_size = (u64)mod->init_ro_size;
-	mod_core_base = (u64)mod->module_core;
-	mod_core_size = (u64)mod->core_size;
-	mod_core_text_size = (u64)mod->core_text_size;
-	mod_core_ro_size = (u64)mod->core_ro_size;
-#else
-	mod_init_base = (u64)(mod->init_layout.base);
-	mod_init_size = (u64)(mod->init_layout.size);
-	mod_init_text_size = (u64)(mod->init_layout.text_size);
-	mod_init_ro_size = (u64)(mod->init_layout.ro_size);
-	mod_core_base = (u64)(mod->core_layout.base);
-	mod_core_size = (u64)(mod->core_layout.size);
-	mod_core_text_size = (u64)(mod->core_layout.text_size);
-	mod_core_ro_size = (u64)(mod->core_layout.ro_size);
-#endif
+	mod_init_base = sb_get_module_init_base(mod);
+	mod_init_size = sb_get_module_init_size(mod);
+	mod_init_text_size = sb_get_module_init_text_size(mod);
+	mod_init_ro_size = sb_get_module_init_ro_size(mod);
+	mod_core_base = sb_get_module_core_base(mod);
+	mod_core_size = sb_get_module_core_size(mod);
+	mod_core_text_size = sb_get_module_core_text_size(mod);
+	mod_core_ro_size = sb_get_module_core_ro_size(mod);
 
-	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] mod:%p [%s]", mod, mod->name);
-	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] init:0x%p module_init:0x%08lX"
-		" module_core:0x%08lX\n", mod->init, mod_init_base, mod_core_base);
-	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] init_size:0x%ld core_size:%ld",
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] mod:0x%016lX [%s], sizeof mod [%d]", mod, mod->name, sizeof(struct module));
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] init:0x%16lX module_init:0x%16lX"
+		" module_core:0x%016lX\n", mod->init, mod_init_base, mod_core_base);
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] init_size:0x%ld core_size:%ld",
 		mod_init_size, mod_core_size);
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] init_text_size:%ld "
 		"core_text_size:%ld\n", mod_init_text_size, mod_core_text_size);
@@ -1334,10 +1409,27 @@ static void sb_add_and_protect_module_ro(struct module* mod)
 		"%ld", mod_init_ro_size, mod_core_ro_size);
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "\n");
 
+	if ((mod_core_base != 0) && (mod_core_ro_size != 0))
+	{
 #if SHADOWBOX_USE_EPT
-	sb_lock_range(mod_core_base, mod_core_base + mod_core_ro_size, ALLOC_VMALLOC);
+		sb_lock_range(mod_core_base, mod_core_base + mod_core_ro_size, ALLOC_VMALLOC);
 #endif
-	sb_add_ro_area(mod_core_base, mod_core_base + mod_core_ro_size, RO_MODULE);
+		sb_add_ro_area(mod_core_base, mod_core_base + mod_core_ro_size, RO_MODULE);
+	}
+}
+
+/*
+ * Unprotect static kernel object of the module.
+ */
+void sb_delete_and_unprotect_module_ro(u64 mod_core_base, u64 mod_core_ro_size)
+{
+	if ((mod_core_base != 0) && (mod_core_ro_size != 0))
+	{
+#if SHADOWBOX_USE_EPT
+		sb_set_all_access_range(mod_core_base, mod_core_base + mod_core_ro_size, ALLOC_VMALLOC);
+#endif
+		sb_delete_ro_area(mod_core_base, mod_core_base + mod_core_ro_size);
+	}
 }
 
 /*
@@ -1411,30 +1503,19 @@ static void sb_protect_shadow_box_module(int protect_mode)
 
 	mod = g_shadow_box_module;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
-	mod_init_base = (u64)mod->module_init;
-	mod_init_size = (u64)mod->init_size;
-	mod_init_text_size = (u64)mod->init_text_size;
-	mod_init_ro_size = (u64)mod->init_ro_size;
-	mod_core_base = (u64)mod->module_core;
-	mod_core_size = (u64)mod->core_size;
-	mod_core_text_size = (u64)mod->core_text_size;
-	mod_core_ro_size = (u64)mod->core_ro_size;
-#else
-	mod_init_base = (u64)(mod->init_layout.base);
-	mod_init_size = (u64)(mod->init_layout.size);
-	mod_init_text_size = (u64)(mod->init_layout.text_size);
-	mod_init_ro_size = (u64)(mod->init_layout.ro_size);
-	mod_core_base = (u64)(mod->core_layout.base);
-	mod_core_size = (u64)(mod->core_layout.size);
-	mod_core_text_size = (u64)(mod->core_layout.text_size);
-	mod_core_ro_size = (u64)(mod->core_layout.ro_size);
-#endif
+	mod_init_base = sb_get_module_init_base(mod);
+	mod_init_size = sb_get_module_init_size(mod);
+	mod_init_text_size = sb_get_module_init_text_size(mod);
+	mod_init_ro_size = sb_get_module_init_ro_size(mod);
+	mod_core_base = sb_get_module_core_base(mod);
+	mod_core_size = sb_get_module_core_size(mod);
+	mod_core_text_size = sb_get_module_core_text_size(mod);
+	mod_core_ro_size = sb_get_module_core_ro_size(mod);
 
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "Protect Shadow-Box Area\n");
-	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] mod:%p [%s], size of module"
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] mod:0x%016lX [%s], size of module"
 		" struct %d", mod, mod->name, sizeof(struct module));
-	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] init:0x%p module_init:0x%08lX "
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] init:0x%016lX module_init:0x%016lX "
 		"module_core:0x%08lX\n", mod->init, mod_init_base, mod_core_base);
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] init_size:0x%ld core_size:%ld",
 		mod_init_size, mod_core_size);
@@ -1462,7 +1543,6 @@ static void sb_protect_shadow_box_module(int protect_mode)
 	else
 	{
 		sb_lock_range(mod_core_base, mod_core_base + mod_core_ro_size, ALLOC_VMALLOC);
-		sb_set_all_access_range(mod_core_base + mod_core_ro_size, mod_core_base + mod_core_size, ALLOC_VMALLOC);
 	}
 
 	/*
@@ -1594,7 +1674,7 @@ void vm_expand_page_table_entry(u64 phy_table_addr, u64 start_entry_and_flags,
 
 	log_addr = (struct sb_pagetable*)phys_to_virt((u64)phy_table_addr & ~(MASK_PAGEFLAG));
 
-	sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "Expand page table entry. Start entry "
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "Expand page table entry. Start entry "
 		"%016lX, size %016lX, phy table %016lX\n", start_entry_and_flags,
 		entry_size, phy_table_addr);
 
@@ -1607,7 +1687,7 @@ void vm_expand_page_table_entry(u64 phy_table_addr, u64 start_entry_and_flags,
 		}
 		else
 		{
-			log_addr->entry[i] = (start_entry_and_flags | MASK_PAGE_SIZE_FLAG) +
+			log_addr->entry[i] = ((start_entry_and_flags & ~(entry_size - 1)) | MASK_PAGE_SIZE_FLAG) +
 				(i * entry_size);
 		}
 	}
@@ -1700,13 +1780,13 @@ int vm_is_same_page_table_flag_or_size_flag_set(struct sb_pagetable* vm,
 int vm_is_new_page_table_needed(struct sb_pagetable* vm, struct sb_pagetable* init,
 	int index)
 {
-	if ((vm->entry[index] != 0) && ((vm->entry[index] & MASK_PAGE_SIZE_FLAG) == 0))
+	if ((vm->entry[index] == 0) || ((vm->entry[index] & MASK_PAGE_SIZE_FLAG)))
 	{
-		return 0;
+		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "Index not present %d\n", index);
+		return 1;
 	}
 
-	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "Index not present %d\n", index);
-	return 1;
+	return 0;
 }
 
 /*
@@ -1836,6 +1916,8 @@ u64 sb_sync_page_table(u64 addr)
 		return 0;
 	}
 
+	spin_lock(&g_mem_sync_lock);
+
 	init_pml4 = (struct sb_pagetable*)g_vm_init_phy_pml4;
 	init_pml4 = phys_to_virt((u64)init_pml4);
 	vm_pml4 = phys_to_virt(g_vm_host_phy_pml4);
@@ -1874,7 +1956,7 @@ u64 sb_sync_page_table(u64 addr)
 	if (vm_is_new_page_table_needed(vm_pml4, init_pml4, pml4_index) == 1)
 	{
 		value = vm_check_alloc_page_table(vm_pml4, pml4_index);
-		vm_expand_page_table_entry(value, vm_pml4->entry[pml4_index], VAL_1GB,
+		vm_expand_page_table_entry(value, phy_entry.phy_addr[3], VAL_1GB,
 			init_pml4->entry[pml4_index]);
 		sb_sync_page_table_flag(vm_pml4, init_pml4, pml4_index, value);
 
@@ -1902,7 +1984,6 @@ u64 sb_sync_page_table(u64 addr)
 	 * Get PDEPT from PDPTE_PD.
 	 */
 	init_pdept = (struct sb_pagetable*)(init_pdpte_pd->entry[pdpte_pd_index]);
-
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "PDPTE_PD index %d %016lX %016lX %016lX\n",
 		pdpte_pd_index, vm_pdpte_pd, init_pdpte_pd,
 		init_pdpte_pd->entry[pdpte_pd_index]);
@@ -1934,10 +2015,9 @@ u64 sb_sync_page_table(u64 addr)
 	if (vm_is_new_page_table_needed(vm_pdpte_pd, init_pdpte_pd, pdpte_pd_index) == 1)
 	{
 		value = vm_check_alloc_page_table(vm_pdpte_pd, pdpte_pd_index);
-		vm_expand_page_table_entry(value, vm_pdpte_pd->entry[pdpte_pd_index],
+		vm_expand_page_table_entry(value, phy_entry.phy_addr[3],
 			VAL_2MB, init_pdpte_pd->entry[pdpte_pd_index]);
 		sb_sync_page_table_flag(vm_pdpte_pd, init_pdpte_pd, pdpte_pd_index, value);
-
 		if (expand_value == 0)
 		{
 			expand_value = VAL_2MB;
@@ -1991,7 +2071,7 @@ u64 sb_sync_page_table(u64 addr)
 	if (vm_is_new_page_table_needed(vm_pdept, init_pdept, pdept_index) == 1)
 	{
 		value = vm_check_alloc_page_table(vm_pdept, pdept_index);
-		vm_expand_page_table_entry(value, vm_pdept->entry[pdept_index], VAL_4KB,
+		vm_expand_page_table_entry(value, phy_entry.phy_addr[3], VAL_4KB,
 			init_pdept->entry[pdept_index]);
 		sb_sync_page_table_flag(vm_pdept, init_pdept, pdept_index, value);
 
@@ -2055,6 +2135,9 @@ EXIT:
 
 	/* Update page table to CPU. */
 	sb_set_cr3(g_vm_host_phy_pml4);
+
+	spin_unlock(&g_mem_sync_lock);
+
 	return expand_value;
 }
 
@@ -2339,9 +2422,11 @@ static int sb_vm_thread(void* argument)
 	memset(control_register, 0, sizeof(struct sb_vm_control_register));
 
 	/* Lock module_mutex, and protect module RO area, and syncronize all core. */
+	synchronize_sched();
 	if (cpu_id == 0)
 	{
 		mutex_lock(&module_mutex);
+
 		sb_protect_module_list_ro_area(reinitialize);
 
 		atomic_set(&g_mutex_lock_flags, 1);
@@ -2738,6 +2823,8 @@ void sb_vm_exit_callback(struct sb_vm_exit_guest_register* guest_context)
 	int cpu_id;
 	u64 info_field;
 
+	preempt_disable();
+
 	cpu_id = smp_processor_id();
 
 	/* Update currnt cpu mode. */
@@ -2972,6 +3059,8 @@ void sb_vm_exit_callback(struct sb_vm_exit_guest_register* guest_context)
 
 	/* Update currnt cpu mode. */
 	g_vmx_root_mode[cpu_id] = 0;
+
+	preempt_enable();
 }
 
 /*
@@ -4015,8 +4104,8 @@ static void sb_setup_vm_guest_register(struct sb_vm_guest_register*
 #if SHADOWBOX_USE_HW_BREAKPOINT
 	set_debugreg(sb_get_symbol_address("wake_up_new_task"), 0);
 	set_debugreg(sb_get_symbol_address("proc_flush_task"), 1);
-	set_debugreg(sb_get_symbol_address("ftrace_module_init"), 2);
-	set_debugreg(sb_get_symbol_address("free_module"), 3);
+	set_debugreg(sb_get_symbol_address("do_init_module"), 2);
+	set_debugreg(sb_get_symbol_address("module_bug_cleanup"), 3);
 
 	dr7 = sb_encode_dr7(0, X86_BREAKPOINT_LEN_X, X86_BREAKPOINT_EXECUTE);
 	dr7 |= sb_encode_dr7(1, X86_BREAKPOINT_LEN_X, X86_BREAKPOINT_EXECUTE);
