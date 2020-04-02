@@ -50,7 +50,6 @@ volatile u64 g_last_dkom_check_jiffies = 0;
 static struct sb_task_manager g_task_manager;
 static struct sb_module_manager g_module_manager;
 static spinlock_t g_time_lock;
-static spinlock_t g_module_lock;
 static volatile u64 g_tasklock_fail_count = 0;
 static volatile u64 g_modulelock_fail_count = 0;
 static int g_vfs_object_attack_detected = 0;
@@ -63,7 +62,7 @@ static struct module* g_helper_module = NULL;
 static int sb_add_task_to_sw_task_manager(struct task_struct* task);
 static int sb_add_module_to_sw_module_manager(struct module* mod, int protect);
 static int sb_del_task_from_sw_task_manager(pid_t pid, pid_t tgid);
-static int sw_del_module_from_sw_module_manager(struct module* mod);
+static int sw_del_module_from_sw_module_manager(int cpu_id, struct module* mod);
 static void sb_check_sw_task_periodic(int cpu_id);
 static void sb_check_sw_module_periodic(int cpu_id);
 static int sb_check_sw_module_list(int cpu_id);
@@ -83,6 +82,7 @@ static int sw_is_in_task_list(struct task_struct* task);
 static int sb_is_in_module_list(struct module* target);
 static int sb_get_task_count(void);
 static int sb_is_valid_vm_status(int cpu_id);
+static struct sb_module_node* sb_is_in_module_manager(int cpu_id, struct module* mod);
 
 #if SHADOWBOX_USE_WATCHER_DEBUG
 static int sb_get_list_count(struct list_head* head);
@@ -167,7 +167,6 @@ void sb_protect_shadow_watcher_data(void)
 void sb_init_shadow_watcher(int reinitialize)
 {
 	spin_lock_init(&g_time_lock);
-	spin_lock_init(&g_module_lock);
 
 	sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "Framework Initailize\n");
 
@@ -253,10 +252,10 @@ static void sb_check_sw_module_periodic(int cpu_id)
 		return ;
 	}
 
-	if (spin_trylock(&g_module_lock))
+	if ((mutex_trylock(&module_mutex)))
 	{
 		sb_check_sw_module_list(cpu_id);
-		spin_unlock(&g_module_lock);
+		mutex_unlock(&module_mutex);
 	}
 	else
 	{
@@ -352,7 +351,6 @@ void sb_sync_sw_page(u64 addr, u64 size)
 	u64 page_count;
 	u64 i;
 
-	// 올림
 	page_count = ((addr % VAL_4KB) + size + VAL_4KB - 1) / VAL_4KB;
 
 	for (i = 0 ; i < page_count ; i++)
@@ -532,9 +530,6 @@ static int sb_check_sw_task_list(int cpu_id)
 
 	if (g_task_count > cur_count)
 	{
-		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] Task count is different, "
-			"expect=%d real=%d\n", cpu_id, g_task_count, cur_count);
-
 		list_for_each_safe(node, next, &(g_task_manager.existing_node_head))
 		{
 			target = container_of(node, struct sb_task_node, list);
@@ -543,6 +538,9 @@ static int sb_check_sw_task_list(int cpu_id)
 			{
 				continue;
 			}
+
+			sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] Task count is different, "
+				"expect=%d real=%d\n", cpu_id, g_task_count, cur_count);
 
 			sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] GRMCODE=%06d Hidden task, PID=%d "
 				"TGID=%d fork name=\"%s\" process name=$(\"%s\")\n", cpu_id, ERROR_TASK_HIDDEN,
@@ -581,8 +579,17 @@ void sb_sw_callback_insmod(int cpu_id, struct sb_vm_exit_guest_register* context
 		goto EXIT;
 	}
 
+	while (!mutex_trylock(&module_mutex))
+	{
+		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "VM [%d] ==== Module Rmmod Lock Fail ===\n",
+			cpu_id);
+		sb_pause_loop();
+		g_modulelock_fail_count++;
+	}
+
 	/* Get last module information and synchronize before introspection. */
 	mod = (struct module*)context->rdi;
+
 	sb_sync_sw_page((u64)mod, sizeof(struct module));
 	sb_sync_sw_page((u64)current, sizeof(struct task_struct));
 
@@ -590,15 +597,25 @@ void sb_sw_callback_insmod(int cpu_id, struct sb_vm_exit_guest_register* context
 		"current PID=%d PPID=%d process name=%s module=%s\n", cpu_id,
 		current->pid, current->parent->pid, current->comm, mod->name);
 
-	spin_lock(&g_module_lock);
+	/* Add module with protect option. */
+	if (mod != THIS_MODULE)
+	{
+		sb_check_sw_module_list(cpu_id);
+		/* Check duplication. */
+		if (!sb_is_in_module_manager(cpu_id, mod))
+		{
+#if SHADOWBOX_USE_EXTRA_MODULE_PROTECTION
+			sb_add_and_protect_module_ro(mod);
+			sb_add_module_to_sw_module_manager(mod, 1);
+#else
+			sb_add_module_to_sw_module_manager(mod, 0);
 
-	/* Add module without protect option. */
-	sb_add_module_to_sw_module_manager(mod, 0);
-	sb_check_sw_module_list(cpu_id);
-
-	spin_unlock(&g_module_lock);
+#endif
+		}
+	}
 
 EXIT:
+	mutex_unlock(&module_mutex);
 	return ;
 }
 
@@ -606,10 +623,13 @@ EXIT:
  * Process rmmod callback.
  *
  * The module is still in module list when this function is called.
+ * This function is also called when the module_mutex is held by do_init_module().
+ * So, we don't need to hold the mutex.
  */
 void sb_sw_callback_rmmod(int cpu_id, struct sb_vm_exit_guest_register* context)
 {
 	struct module* mod;
+	struct sb_module_node* node;
 	u64 mod_base;
 	u64 mod_ro_size;
 
@@ -620,37 +640,41 @@ void sb_sw_callback_rmmod(int cpu_id, struct sb_vm_exit_guest_register* context)
 
 	/* Synchronize before introspection. */
 	mod = (struct module*)context->rdi;
+
 	sb_sync_sw_page((u64)mod, sizeof(struct module));
 	sb_sync_sw_page((u64)current, sizeof(struct task_struct));
 
-	if (!sb_is_in_module_list(mod))
-	{
-		goto EXIT;
-	}
-
 	if ((mod != THIS_MODULE) && (mod != g_helper_module))
 	{
-		/* Relase all memory and give all permission to physical pages. */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0)
-		mod_base = (u64)mod->module_core;
-		mod_ro_size = (u64)mod->core_ro_size;
-#else
-		mod_base = (u64)(mod->core_layout.base);
-		mod_ro_size = (u64)(mod->core_layout.ro_size);
-#endif /* LINUX_VERSION_CODE */
-		sb_set_all_access_range(mod_base, mod_base + mod_ro_size, ALLOC_VMALLOC);
-		sb_delete_ro_area(mod_base, mod_base + mod_ro_size);
-
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] Kernel module is unloaded, "
 			"current PID=%d PPID=%d process name=%s module=%s\n", cpu_id,
 			current->pid, current->parent->pid, current->comm, mod->name);
 
-		spin_lock(&g_module_lock);
+		/* Check existance. */
+		node = sb_is_in_module_manager(cpu_id, mod);
+		if (node != NULL)
+		{
+			/* Check the module size before and after. */
+			mod_base = sb_get_module_core_base(mod);
+			mod_ro_size = sb_get_module_core_ro_size(mod);
 
-		sb_check_sw_module_list(cpu_id);
-		sw_del_module_from_sw_module_manager(mod);
+			if ((mod_base != node->base) ||
+				(mod_ro_size != node->size))
+			{
+				sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] Kernel module's RO is changed,"
+					"original base: %016lX, new base: %016lx, original size: %016lX, new size: %016lX\n",
+					cpu_id, node->base, mod_base, node->size, mod_ro_size);
 
-		spin_unlock(&g_module_lock);
+				mod_base = node->base;
+				mod_ro_size = node->size;
+			}
+
+			/* Release all memory and give all permission to physical pages. */
+			sb_delete_and_unprotect_module_ro(mod_base, mod_ro_size);
+
+			sw_del_module_from_sw_module_manager(cpu_id, mod);
+			sb_check_sw_module_list(cpu_id);
+		}
 	}
 	else
 	{
@@ -671,7 +695,6 @@ void sb_sw_callback_rmmod(int cpu_id, struct sb_vm_exit_guest_register* context)
 
 		sb_insert_exception_to_vm();
 	}
-
 EXIT:
 	return ;
 }
@@ -716,9 +739,6 @@ static int sb_check_sw_module_list(int cpu_id)
 
 	if (g_module_count > count)
 	{
-		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] Module count is different, "
-			"expect=%d real=%d\n", cpu_id, g_module_count, count);
-
 		list_for_each_safe(node, next, &(g_module_manager.existing_node_head))
 		{
 			target = container_of(node, struct sb_module_node, list);
@@ -727,10 +747,13 @@ static int sb_check_sw_module_list(int cpu_id)
 				continue;
 			}
 
+			sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] Module count is different, "
+				"expect=%d real=%d\n", cpu_id, g_module_count, count);
+
 			sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] GRMCODE=%06d Hidden module, module "
 				"name=$(\"%s\") ptr=%016lX\n", cpu_id, ERROR_MODULE_HIDDEN, target->name, target->module);
 
-			sw_del_module_from_sw_module_manager(target->module);
+			sw_del_module_from_sw_module_manager(cpu_id, target->module);
 		}
 
 		sb_error_log(ERROR_KERNEL_MODIFICATION);
@@ -744,7 +767,7 @@ static int sb_check_sw_module_list(int cpu_id)
  */
 static int sb_get_module_count(void)
 {
-	struct list_head *node;
+	struct list_head *pos, *node;
 	int count = 0;
 	struct module* cur;
 
@@ -753,15 +776,16 @@ static int sb_get_module_count(void)
 	/* Synchronize before introspection. */
 	sb_sync_sw_page((u64)(node->next), sizeof(struct list_head));
 
-	list_for_each_entry_rcu(cur, node, list)
+	list_for_each(pos, node)
 	{
+		cur = container_of(pos, struct module, list);
 		if (cur != NULL)
 		{
 			sb_sync_sw_page((u64)cur, sizeof(cur));
 
 			sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "kernel module %s, list ptr %016lX, "
-				"phy %016lX module ptr %016lX\n", cur->name, &(cur->list),
-				virt_to_phys(&(cur->list)), cur);
+				"phy %016lX module ptr %016lX, phy %016lX\n", cur->name, pos,
+				virt_to_phys(pos), cur, virt_to_phys(pos));
 		}
 		count++;
 	}
@@ -774,7 +798,7 @@ static int sb_get_module_count(void)
  */
 static int sb_is_in_module_list(struct module* target)
 {
-	struct list_head *node;
+	struct list_head *pos, *node;
 	struct module* cur;
 	int find = 0;
 
@@ -783,8 +807,9 @@ static int sb_is_in_module_list(struct module* target)
 	/* Synchronize before introspection. */
 	sb_sync_sw_page((u64)(node->next), sizeof(struct list_head));
 
-	list_for_each_entry_rcu(cur, node, list)
+	list_for_each(pos, node)
 	{
+		cur = container_of(pos, struct module, list);
 		sb_sync_sw_page((u64)cur, sizeof(cur));
 		if (cur == target)
 		{
@@ -792,10 +817,33 @@ static int sb_is_in_module_list(struct module* target)
 			break;
 		}
 
-		sb_sync_sw_page((u64)(cur->list.next), sizeof(struct list_head));
+		sb_sync_sw_page((u64)(pos->next), sizeof(struct list_head));
 	}
 
 	return find;
+}
+
+/*
+ * Check module manager.
+ */
+static struct sb_module_node* sb_is_in_module_manager(int cpu_id, struct module* mod)
+{
+	struct list_head *node;
+	struct list_head *next;
+	struct sb_module_node *target;
+	struct sb_module_node* found = NULL;
+
+	list_for_each_safe(node, next, &(g_module_manager.existing_node_head))
+	{
+		target = container_of(node, struct sb_module_node, list);
+		if (target->module == mod)
+		{
+			found = target;
+			break;
+		}
+	}
+
+	return found;
 }
 
 /*
@@ -894,6 +942,10 @@ static int sb_add_module_to_sw_module_manager(struct module *mod, int protect)
 	node->protect = protect;
 	memcpy(node->name, mod->name, sizeof(mod->name));
 
+	/* Save module base and size to check later. */
+	node->base = sb_get_module_core_base(mod);
+	node->size = sb_get_module_core_ro_size(mod);
+
 	list_add(&(node->list), &(g_module_manager.existing_node_head));
 
 	return 0;
@@ -905,11 +957,13 @@ static int sb_add_module_to_sw_module_manager(struct module *mod, int protect)
 static void sb_copy_module_list_to_sw_module_manager(void)
 {
 	struct module *mod;
-	struct list_head *node;
+	struct list_head *pos, *node;
 
 	node = g_modules_ptr;
-	list_for_each_entry_rcu(mod, node, list)
+	list_for_each(pos, node)
 	{
+		mod = container_of(pos, struct module, list);
+
 		if (strcmp(mod->name, HELPER_MODULE_NAME) == 0)
 		{
 			g_helper_module = mod;
@@ -947,18 +1001,18 @@ static int sb_del_task_from_sw_task_manager(pid_t pid, pid_t tgid)
 /*
  * Delete the module from module manager.
  */
-static int sw_del_module_from_sw_module_manager(struct module *mod)
+static int sw_del_module_from_sw_module_manager(int cpu_id, struct module *mod)
 {
 	struct list_head *node;
 	struct sb_module_node *target;
-
-	g_module_count--;
 
 	list_for_each(node, &(g_module_manager.existing_node_head))
 	{
 		target = container_of(node, struct sb_module_node, list);
 		if (target->module == mod)
 		{
+			g_module_count--;
+
 			list_del(&(target->list));
 			list_add(&(target->list), &(g_module_manager.free_node_head));
 			return 0;
