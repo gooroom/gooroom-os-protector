@@ -85,6 +85,7 @@ volatile int g_allow_shadow_box_hide = 0;
 volatile u64 g_init_in_secure_jiffies = 0;
 atomic_t g_thread_run_flags;
 atomic_t g_thread_entry_count;
+atomic_t g_thread_rcu_sync_count;
 atomic_t g_sync_flags;
 atomic_t g_complete_flags;
 atomic_t g_framework_init_start_flags;
@@ -468,6 +469,7 @@ static int sb_start(u64 reinitialize)
 
 	atomic_set(&g_thread_run_flags, cpu_count);
 	atomic_set(&g_thread_entry_count, cpu_count);
+	atomic_set(&g_thread_rcu_sync_count, cpu_count);
 	atomic_set(&g_sync_flags, cpu_count);
 	atomic_set(&g_complete_flags, cpu_count);
 	atomic_set(&g_framework_init_start_flags, cpu_count);
@@ -2422,7 +2424,14 @@ static int sb_vm_thread(void* argument)
 	memset(control_register, 0, sizeof(struct sb_vm_control_register));
 
 	/* Lock module_mutex, and protect module RO area, and syncronize all core. */
-	synchronize_sched();
+	synchronize_rcu();
+	/* Synchronize processors. */
+	atomic_dec(&g_thread_rcu_sync_count);
+	while(atomic_read(&g_thread_rcu_sync_count) > 0)
+	{
+		schedule();
+	}
+
 	if (cpu_id == 0)
 	{
 		mutex_lock(&module_mutex);
@@ -2468,9 +2477,6 @@ static int sb_vm_thread(void* argument)
 		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] Dup talbe Initialize Complete\n",
 			cpu_id);
 
-		/* Lock tasklist. */
-		read_lock(g_tasklist_lock);
-
 		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] Framework Initialize \n",
 			cpu_id);
 
@@ -2479,9 +2485,6 @@ static int sb_vm_thread(void* argument)
 
 		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] Framework Initialize Complete \n",
 			cpu_id);
-
-		/* Unlock tasklist. */
-		read_unlock(g_tasklist_lock);
 	}
 
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] Framework Initialize Waiting\n",
