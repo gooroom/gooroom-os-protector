@@ -1,3 +1,12 @@
+gooroom-os-protector (2.4.1+4.19.67~2+deb10u2+grm2u2) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [c7288022] Remove improper read_lock and set barrier to sync_rcu
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Tue, 07 Apr 2020 12:12:09 +0900
+
 gooroom-os-protector (2.4.0+4.19.67~2+deb10u2+grm2u2) stable; urgency=medium
 
   [ Seunghun Han ]
