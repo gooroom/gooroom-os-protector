@@ -89,7 +89,6 @@ atomic_t g_thread_rcu_sync_count;
 atomic_t g_sync_flags;
 atomic_t g_complete_flags;
 atomic_t g_framework_init_start_flags;
-atomic_t g_enter_flags;
 atomic_t g_enter_count;
 atomic_t g_first;
 atomic_t g_framework_init_flags;
@@ -447,6 +446,13 @@ static int __init shadow_box_init(void)
 ERROR_HANDLE:
 	sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "Execution Fail\n");
 
+#if SHADOWBOX_USE_IOMMU
+	if (cpu_id == 0)
+	{
+		sb_unlock_iommu();
+	}
+#endif /* SHADOWBOX_USE_IOMMU */
+
 	sb_free_ept_pages();
 	sb_free_iommu_pages();
 	return -1;
@@ -474,7 +480,6 @@ static int sb_start(u64 reinitialize)
 	atomic_set(&g_complete_flags, cpu_count);
 	atomic_set(&g_framework_init_start_flags, cpu_count);
 	atomic_set(&g_first, 1);
-	atomic_set(&g_enter_flags, 0);
 	atomic_set(&g_enter_count, 0);
 	atomic_set(&g_framework_init_flags, cpu_count);
 	atomic_set(&g_iommu_complete_flags, 0);
@@ -2415,7 +2420,7 @@ static int sb_vm_thread(void* argument)
 	{
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] Host or Guest or Control "
 			"Register alloc fail\n", cpu_id);
-		g_thread_result |= -1;
+		g_thread_result = -1;
 		return -1;
 	}
 
@@ -2424,12 +2429,18 @@ static int sb_vm_thread(void* argument)
 	memset(control_register, 0, sizeof(struct sb_vm_control_register));
 
 	/* Lock module_mutex, and protect module RO area, and syncronize all core. */
-	synchronize_rcu();
+	if (cpu_id == 0)
+	{
+		synchronize_rcu();
+	}
+
 	/* Synchronize processors. */
 	atomic_dec(&g_thread_rcu_sync_count);
 	while(atomic_read(&g_thread_rcu_sync_count) > 0)
 	{
-		schedule();
+		msleep(500);
+		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] wait for synchronize_rcu %d\n",
+			cpu_id, g_thread_rcu_sync_count);
 	}
 
 	if (cpu_id == 0)
@@ -2446,7 +2457,9 @@ static int sb_vm_thread(void* argument)
 	{
 		while (atomic_read(&g_mutex_lock_flags) == 0)
 		{
-			schedule();
+			msleep(500);
+			sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] wait for mutex_lock %d\n",
+				cpu_id, g_mutex_lock_flags);
 		}
 	}
 
@@ -2498,10 +2511,6 @@ static int sb_vm_thread(void* argument)
 	}
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] VM [%d] Complete\n", cpu_id);
 
-	/* Disable interrupt before VM launch */
-	local_irq_save(irqs);
-	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] IRQ Lock complete\n", cpu_id);
-
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] Wait until stable status\n",
 		cpu_id);
 	mdelay(10);
@@ -2536,10 +2545,9 @@ static int sb_vm_thread(void* argument)
 		mdelay(1);
 	}
 
-	/* Initialize VMX */
+	/* Initialize VMX. */
 	if (sb_init_vmx(cpu_id) < 0)
 	{
-		atomic_set(&g_enter_flags, 0);
 		atomic_inc(&g_enter_count);
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] sb_init_vmx fail\n", cpu_id);
 
@@ -2555,9 +2563,11 @@ static int sb_vm_thread(void* argument)
 
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] Launch Start\n", cpu_id);
 
+	/* Disable interrupts before launch and enable again. */
+	local_irq_save(irqs);
 	result = sb_vm_launch();
+	local_irq_restore(irqs);
 
-	atomic_set(&g_enter_flags, 0);
 	atomic_inc(&g_enter_count);
 
 	if (result == -2)
@@ -2600,11 +2610,9 @@ static int sb_vm_thread(void* argument)
 ERROR:
 	if (result != 0)
 	{
-		g_thread_result |= -1;
+		g_thread_result = -1;
 	}
 
-	/* Enable interrupt */
-	local_irq_restore(irqs);
 	preempt_enable();
 
 	if (cpu_id == 0)

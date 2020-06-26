@@ -327,9 +327,8 @@ static void sb_enable_iommu(u8* reg_remap_addr)
 	u32 flags;
 	unsigned long irqs;
 
-	local_irq_save(irqs);
-	local_irq_disable();
 	preempt_disable();
+	local_irq_save(irqs);
 
 	flags = readl(reg_remap_addr + DMAR_GSTS_REG);
 	writel(flags | DMA_GCMD_QIE, reg_remap_addr + DMAR_GCMD_REG);
@@ -350,9 +349,8 @@ void sb_disable_iommu(u8* reg_remap_addr)
 	u32 flags;
 	unsigned long irqs;
 
-	local_irq_save(irqs);
-	local_irq_disable();
 	preempt_disable();
+	local_irq_save(irqs);
 
 	flags = readl(reg_remap_addr + DMAR_GSTS_REG);
 	writel(flags & ~DMA_GCMD_TE, reg_remap_addr + DMAR_GCMD_REG);
@@ -373,8 +371,8 @@ static void sb_set_iommu_root_entry_register(u8* reg_remap_addr, u64 addr)
 	u32 flags;
 	unsigned long irqs;
 
-	local_irq_save(irqs);
 	preempt_disable();
+	local_irq_save(irqs);
 
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "Root Entry Addr %016lX\n", addr);
 	flags = readl(reg_remap_addr + DMAR_GSTS_REG);
