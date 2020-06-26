@@ -113,6 +113,7 @@
 #define SYMBOL_MAX_COUNT					25
 
 #define VMCS_SIZE							0x2000
+#define VMCS_SIZE_ORDER						(VMCS_SIZE / VAL_4KB - 1)
 #define IO_BITMAP_SIZE						0x1000
 #define VIRT_APIC_PAGE_SIZE 				0x1000
 

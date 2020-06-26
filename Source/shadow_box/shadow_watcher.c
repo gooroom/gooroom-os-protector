@@ -231,6 +231,9 @@ static void sb_check_sw_task_periodic(int cpu_id)
 
 	if (write_trylock(g_tasklist_lock))
 	{
+		/* Flush previous TLB mappaing. */
+		__flush_tlb_global();
+
 		sb_check_sw_task_list(cpu_id);
 		write_unlock(g_tasklist_lock);
 	}
@@ -254,6 +257,9 @@ static void sb_check_sw_module_periodic(int cpu_id)
 
 	if ((mutex_trylock(&module_mutex)))
 	{
+		/* Flush previous TLB mappaing. */
+		__flush_tlb_global();
+
 		sb_check_sw_module_list(cpu_id);
 		mutex_unlock(&module_mutex);
 	}
@@ -381,6 +387,9 @@ void sb_sw_callback_add_task(int cpu_id, struct sb_vm_exit_guest_register* conte
 		goto EXIT;
 	}
 
+	/* Flush previous TLB mappaing. */
+	__flush_tlb_global();
+
 	/* Syncronize before introspection. */
 	sb_sync_sw_page((u64)task, sizeof(struct task_struct));
 
@@ -431,6 +440,9 @@ void sb_sw_callback_del_task(int cpu_id, struct sb_vm_exit_guest_register* conte
 	{
 		goto EXIT;
 	}
+
+	/* Flush previous TLB mappaing. */
+	__flush_tlb_global();
 
 	if (sw_is_in_task_list(task))
 	{
@@ -579,6 +591,9 @@ void sb_sw_callback_insmod(int cpu_id, struct sb_vm_exit_guest_register* context
 		goto EXIT;
 	}
 
+	/* Flush previous TLB mappaing. */
+	__flush_tlb_global();
+
 	while (!mutex_trylock(&module_mutex))
 	{
 		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "VM [%d] ==== Module Rmmod Lock Fail ===\n",
@@ -637,6 +652,9 @@ void sb_sw_callback_rmmod(int cpu_id, struct sb_vm_exit_guest_register* context)
 	{
 		goto EXIT;
 	}
+
+	/* Flush previous TLB mappaing. */
+	__flush_tlb_global();
 
 	/* Synchronize before introspection. */
 	mod = (struct module*)context->rdi;

@@ -45,9 +45,11 @@ static int sb_callback_walk_ram(unsigned long start, unsigned long size,
 static int sb_callback_set_write_back_to_ram(unsigned long start,
 	unsigned long size, void* arg);
 static void sb_setup_ept_system_ram_range(void);
+static int sb_alloc_ept_pages_internal(u64 *array, int count);
+static void sb_free_ept_pages_internal(u64 *array, int count);
 
 /*
- * Protect page table memory for EPT
+ * Protect page table memory for EPT.
  */
 void sb_protect_ept_pages(void)
 {
@@ -185,34 +187,25 @@ void sb_setup_ept_pagetable_4KB(void)
 	u64 loop_cnt;
 	u64 base_addr;
 
-	/* Setup PML4 */
+	/* Setup PML4. */
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "Setup PLML4\n");
 	ept_info = (struct sb_ept_pagetable*)sb_get_pagetable_log_addr(EPT_TYPE_PML4, 0);
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Setup PML4 %016lX\n",
 			(u64)ept_info);
 	memset(ept_info, 0, sizeof(struct sb_ept_pagetable));
 
-	base_addr = 0;
+	/* Map all physical range. */
 	for (i = 0 ; i < EPT_PAGE_ENT_COUNT ; i++)
 	{
-		if (i < g_ept_info.pml4_ent_count)
-		{
-			next_page_table_addr = (u64)sb_get_pagetable_phy_addr(EPT_TYPE_PDPTEPD,
-				i);
-			ept_info->entry[i] = next_page_table_addr | EPT_ALL_ACCESS;
+		next_page_table_addr = (u64)sb_get_pagetable_phy_addr(EPT_TYPE_PDPTEPD,
+			i);
+		ept_info->entry[i] = next_page_table_addr | EPT_ALL_ACCESS;
 
-			if (i == 0)
-			{
-				sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] %016lX\n",
-					(u64)next_page_table_addr);
-			}
-		}
-		else
+		if (i == 0)
 		{
-			ept_info->entry[i] = base_addr | EPT_ALL_ACCESS;
+			sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] %016lX\n",
+				(u64)next_page_table_addr);
 		}
-
-		base_addr += VAL_512GB;
 	}
 
 	/* Setup PDPTE PD. */
@@ -225,6 +218,21 @@ void sb_setup_ept_pagetable_4KB(void)
 		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Setup PDPTEPD [%d] %016lX\n",
 			j, (u64)ept_info);
 		memset(ept_info, 0, sizeof(struct sb_ept_pagetable));
+
+		/*
+		 * Map 1:1 for all address spaces for IOMEM.
+		 * 	Some devices have own IOMEM areas far from the RAM space.
+		 */
+		if (j * EPT_PAGE_ENT_COUNT > g_ept_info.pdpte_pd_ent_count)
+		{
+			for (i = 0 ; i < EPT_PAGE_ENT_COUNT ; i++)
+			{
+				ept_info->entry[i] = base_addr | EPT_ALL_ACCESS | MASK_PAGE_SIZE_FLAG;
+				base_addr += VAL_1GB;
+			}
+
+			continue;
+		}
 
 		loop_cnt = g_ept_info.pdpte_pd_ent_count - (j * EPT_PAGE_ENT_COUNT);
 		if (loop_cnt > EPT_PAGE_ENT_COUNT)
@@ -248,7 +256,7 @@ void sb_setup_ept_pagetable_4KB(void)
 			}
 			else
 			{
-				ept_info->entry[i] = base_addr | EPT_ALL_ACCESS;
+				ept_info->entry[i] = base_addr | EPT_ALL_ACCESS | MASK_PAGE_SIZE_FLAG;
 			}
 
 			base_addr += VAL_1GB;
@@ -288,7 +296,7 @@ void sb_setup_ept_pagetable_4KB(void)
 			}
 			else
 			{
-				ept_info->entry[i] = base_addr | EPT_ALL_ACCESS;
+				ept_info->entry[i] = base_addr | EPT_ALL_ACCESS | MASK_PAGE_SIZE_FLAG;
 			}
 
 			base_addr += VAL_2MB;
@@ -303,31 +311,16 @@ void sb_setup_ept_pagetable_4KB(void)
 			j);
 		memset(ept_info, 0, sizeof(struct sb_ept_pagetable));
 
-		loop_cnt = g_ept_info.pte_ent_count - (j * EPT_PAGE_ENT_COUNT);
-		if (loop_cnt > EPT_PAGE_ENT_COUNT)
-		{
-			loop_cnt = EPT_PAGE_ENT_COUNT;
-		}
-
 		for (i = 0 ; i < EPT_PAGE_ENT_COUNT ; i++)
 		{
-			if (i < loop_cnt)
-			{
-				next_page_table_addr = ((u64)j * EPT_PAGE_ENT_COUNT + i) *
-					EPT_PAGE_SIZE;
-				/*
-				 * Set uncacheable type by default.
-				 * Set write-back type to "System RAM" areas at the end of this
-				 * function.
-				 */
-				ept_info->entry[i] = next_page_table_addr | EPT_ALL_ACCESS;
-			}
-			else
-			{
-				ept_info->entry[i] = base_addr | EPT_ALL_ACCESS;
-			}
-
-			base_addr += VAL_4KB;
+			next_page_table_addr = ((u64)j * EPT_PAGE_ENT_COUNT + i) *
+				EPT_PAGE_SIZE;
+			/*
+			 * Set uncacheable type by default.
+			 * Set write-back type to "System RAM" areas at the end of this
+			 * function.
+			 */
+			ept_info->entry[i] = next_page_table_addr | EPT_ALL_ACCESS;
 		}
 	}
 
@@ -336,19 +329,51 @@ void sb_setup_ept_pagetable_4KB(void)
 }
 
 /*
+ *	Allocate pages for EPT internally.
+ */
+static int sb_alloc_ept_pages_internal(u64 *array, int count)
+{
+	int i;
+
+	for (i = 0 ; i < count ; i++)
+	{
+		array[i] = (u64)__get_free_page(GFP_KERNEL);
+		if (array[i] == 0)
+		{
+			return -1;
+		}
+	}
+	return 0;
+}
+
+/*
+ * Free pages for EPT internally.
+ */
+static void sb_free_ept_pages_internal(u64 *array, int count)
+{
+	int i;
+
+	for (i = 0 ; i < count ; i++)
+	{
+		if (array[i] != 0)
+		{
+			free_page(array[i]);
+		}
+	}
+}
+
+/*
  * Allocate memory for EPT.
  */
 int sb_alloc_ept_pages(void)
 {
-	int i;
-
 	g_ept_info.pml4_ent_count = CEIL(g_max_ram_size, VAL_512GB);
 	g_ept_info.pdpte_pd_ent_count = CEIL(g_max_ram_size, VAL_1GB);
 	g_ept_info.pdept_ent_count = CEIL(g_max_ram_size, VAL_2MB);
 	g_ept_info.pte_ent_count = CEIL(g_max_ram_size, VAL_4KB);
 
-	g_ept_info.pml4_page_count = CEIL(g_ept_info.pml4_ent_count, EPT_PAGE_ENT_COUNT);
-	g_ept_info.pdpte_pd_page_count = CEIL(g_ept_info.pdpte_pd_ent_count, EPT_PAGE_ENT_COUNT);
+	g_ept_info.pml4_page_count = PML4_PAGE_COUNT;
+	g_ept_info.pdpte_pd_page_count = EPT_PAGE_ENT_COUNT;
 	g_ept_info.pdept_page_count = CEIL(g_ept_info.pdept_ent_count, EPT_PAGE_ENT_COUNT);
 	g_ept_info.pte_page_count = CEIL(g_ept_info.pte_ent_count, EPT_PAGE_ENT_COUNT);
 
@@ -375,13 +400,13 @@ int sb_alloc_ept_pages(void)
 		(int)g_ept_info.pte_page_count);
 
 	/* Allocate memory for page table. */
-	g_ept_info.pml4_page_addr_array = (u64*)vmalloc(g_ept_info.pml4_page_count *
+	g_ept_info.pml4_page_addr_array = (u64*)vzalloc(g_ept_info.pml4_page_count *
 		sizeof(u64*));
-	g_ept_info.pdpte_pd_page_addr_array = (u64*)vmalloc(g_ept_info.pdpte_pd_page_count *
+	g_ept_info.pdpte_pd_page_addr_array = (u64*)vzalloc(g_ept_info.pdpte_pd_page_count *
 		sizeof(u64*));
-	g_ept_info.pdept_page_addr_array = (u64*)vmalloc(g_ept_info.pdept_page_count *
+	g_ept_info.pdept_page_addr_array = (u64*)vzalloc(g_ept_info.pdept_page_count *
 		sizeof(u64*));
-	g_ept_info.pte_page_addr_array = (u64*)vmalloc(g_ept_info.pte_page_count *
+	g_ept_info.pte_page_addr_array = (u64*)vzalloc(g_ept_info.pte_page_count *
 		sizeof(u64*));
 
 	if ((g_ept_info.pml4_page_addr_array == NULL) ||
@@ -389,56 +414,41 @@ int sb_alloc_ept_pages(void)
 		(g_ept_info.pdept_page_addr_array == NULL) ||
 		(g_ept_info.pte_page_addr_array == NULL))
 	{
-		sb_printf(LOG_LEVEL_ERROR, LOG_INFO " sb_alloc_ept_pages alloc fail\n");
-		return -1;
+		goto ERROR;
 	}
 
-	for (i = 0 ; i < g_ept_info.pml4_page_count ; i++)
+	if (sb_alloc_ept_pages_internal(g_ept_info.pml4_page_addr_array,
+		g_ept_info.pml4_page_count) != 0)
 	{
-		g_ept_info.pml4_page_addr_array[i] = (u64)kmalloc(0x1000,GFP_KERNEL);
-		if (g_ept_info.pml4_page_addr_array[i] == 0)
-		{
-			sb_printf(LOG_LEVEL_ERROR, LOG_INFO " sb_alloc_ept_pages alloc fail\n");
-			return -1;
-		}
+		goto ERROR;
 	}
 
-	for (i = 0 ; i < g_ept_info.pdpte_pd_page_count ; i++)
+	if (sb_alloc_ept_pages_internal(g_ept_info.pdpte_pd_page_addr_array,
+		g_ept_info.pdpte_pd_page_count) != 0)
 	{
-		g_ept_info.pdpte_pd_page_addr_array[i] = (u64)kmalloc(0x1000,GFP_KERNEL);
-
-		if (g_ept_info.pdpte_pd_page_addr_array[i] == 0)
-		{
-			sb_printf(LOG_LEVEL_ERROR, LOG_INFO " sb_alloc_ept_pages alloc fail\n");
-			return -1;
-		}
+		goto ERROR;
 	}
 
-	for (i = 0 ; i < g_ept_info.pdept_page_count ; i++)
+	if (sb_alloc_ept_pages_internal(g_ept_info.pdept_page_addr_array,
+		g_ept_info.pdept_page_count) != 0)
 	{
-		g_ept_info.pdept_page_addr_array[i] = (u64)kmalloc(0x1000,GFP_KERNEL);
-
-		if (g_ept_info.pdept_page_addr_array[i] == 0)
-		{
-			sb_printf(LOG_LEVEL_ERROR, LOG_INFO " sb_alloc_ept_pages alloc fail\n");
-			return -1;
-		}
+		goto ERROR;
 	}
 
-	for (i = 0 ; i < g_ept_info.pte_page_count ; i++)
+	if (sb_alloc_ept_pages_internal(g_ept_info.pte_page_addr_array,
+		g_ept_info.pte_page_count) != 0)
 	{
-		g_ept_info.pte_page_addr_array[i] = (u64)kmalloc(0x1000,GFP_KERNEL);
-
-		if (g_ept_info.pte_page_addr_array[i] == 0)
-		{
-			sb_printf(LOG_LEVEL_ERROR, LOG_INFO " sb_alloc_ept_pages alloc fail\n");
-			return -1;
-		}
+		goto ERROR;
 	}
 
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Page Table Memory Alloc Success\n");
 
 	return 0;
+
+ERROR:
+	sb_printf(LOG_LEVEL_ERROR, LOG_INFO " sb_alloc_ept_pages alloc fail\n");
+
+	return -1;
 }
 
 /*
@@ -448,25 +458,37 @@ void sb_free_ept_pages(void)
 {
 	if (g_ept_info.pml4_page_addr_array != 0)
 	{
-		kfree(g_ept_info.pml4_page_addr_array);
+		sb_free_ept_pages_internal(g_ept_info.pml4_page_addr_array,
+			g_ept_info.pml4_page_count);
+
+		vfree(g_ept_info.pml4_page_addr_array);
 		g_ept_info.pml4_page_addr_array = 0;
 	}
 
 	if (g_ept_info.pdpte_pd_page_addr_array != 0)
 	{
-		kfree(g_ept_info.pdpte_pd_page_addr_array);
+		sb_free_ept_pages_internal(g_ept_info.pdpte_pd_page_addr_array,
+			g_ept_info.pdpte_pd_page_count);
+
+		vfree(g_ept_info.pdpte_pd_page_addr_array);
 		g_ept_info.pdpte_pd_page_addr_array = 0;
 	}
 
 	if (g_ept_info.pdept_page_addr_array != 0)
 	{
-		kfree(g_ept_info.pdept_page_addr_array);
+		sb_free_ept_pages_internal(g_ept_info.pdept_page_addr_array,
+			g_ept_info.pdept_page_count);
+
+		vfree(g_ept_info.pdept_page_addr_array);
 		g_ept_info.pdept_page_addr_array = 0;
 	}
 
 	if (g_ept_info.pte_page_addr_array != 0)
 	{
-		kfree(g_ept_info.pte_page_addr_array);
+		sb_free_ept_pages_internal(g_ept_info.pte_page_addr_array,
+			g_ept_info.pte_page_count);
+
+		vfree(g_ept_info.pte_page_addr_array);
 		g_ept_info.pte_page_addr_array = 0;
 	}
 }

@@ -43,6 +43,8 @@ static void sb_wait_dmar_operation(u8* reg_remap_addr, int flag);
 static int sb_need_intel_i915_workaround(void);
 static int sb_is_intel_graphics_in(struct acpi_dmar_hardware_unit* drhd);
 static acpi_status sb_get_acpi_dmar_table_header(struct acpi_table_dmar** dmar_ptr);
+static int sb_alloc_iommu_pages_internal(u64 *array, int count);
+static void sb_free_iommu_pages_internal(u64 *array, int count);
 
 #if SHADOWBOX_USE_IOMMU_DEBUG
 /*
@@ -467,116 +469,182 @@ void sb_set_iommu_page_flags(u64 phy_addr, u32 flags)
  */
 void sb_setup_iommu_pagetable_4KB(void)
 {
-	struct sb_iommu_pagetable* pstIOMMU;
+	struct sb_iommu_pagetable* iommu_info;
 	u64 next_page_table;
-	int i;
-	int j;
-	int iLoopCnt;
+	u64 i;
+	u64 j;
+	u64 loop_cnt;
+	u64 base_addr;
 
 	/* Setup PML4. */
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "Setup PLML4\n");
-	pstIOMMU = (struct sb_iommu_pagetable*)sb_get_iommu_pagetable_log_addr(
+	iommu_info = (struct sb_iommu_pagetable*)sb_get_iommu_pagetable_log_addr(
 		IOMMU_TYPE_PML4, 0);
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Setup PML4 %016lX, %016lX\n",
-			(u64)pstIOMMU, virt_to_phys((void*)pstIOMMU));
-	memset(pstIOMMU, 0, sizeof(struct sb_iommu_pagetable));
-	for (i = 0 ; i < g_iommu_info.pml4_ent_count ; i++)
+			(u64)iommu_info, virt_to_phys((void*)iommu_info));
+	memset(iommu_info, 0, sizeof(struct sb_iommu_pagetable));
+
+	/* Map all physical range. */
+	for (i = 0 ; i < IOMMU_PAGE_ENT_COUNT ; i++)
 	{
 		next_page_table = (u64)sb_get_iommu_pagetable_phy_addr(IOMMU_TYPE_PDPTEPD,
 			i);
-		pstIOMMU->entry[i] = next_page_table | IOMMU_PAGE_ALL_ACCESS;
+		iommu_info->entry[i] = next_page_table | IOMMU_PAGE_ALL_ACCESS;
 		if (i == 0)
 		{
 			sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] %016lX\n",
 				(u64)next_page_table);
 		}
 	}
-	clflush_cache_range(pstIOMMU, IOMMU_PAGE_SIZE);
+	clflush_cache_range(iommu_info, IOMMU_PAGE_SIZE);
 
-	// Setup PDPTEPD
+	/* Setup PDPTEPD. */
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "Setup PDPTEPD\n");
+	base_addr = 0;
 	for (j = 0 ; j < g_iommu_info.pdpte_pd_page_count ; j++)
 	{
-		pstIOMMU = (struct sb_iommu_pagetable*)sb_get_iommu_pagetable_log_addr(
+		iommu_info = (struct sb_iommu_pagetable*)sb_get_iommu_pagetable_log_addr(
 			IOMMU_TYPE_PDPTEPD, j);
 		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Setup PDPTEPD [%d] %016lX "
-			"%016lX\n", j, (u64)pstIOMMU, virt_to_phys((void*)pstIOMMU));
-		memset(pstIOMMU, 0, sizeof(struct sb_iommu_pagetable));
+			"%016lX\n", j, (u64)iommu_info, virt_to_phys((void*)iommu_info));
+		memset(iommu_info, 0, sizeof(struct sb_iommu_pagetable));
 
-		iLoopCnt = g_iommu_info.pdpte_pd_ent_count - (j * IOMMU_PAGE_ENT_COUNT);
-		if (iLoopCnt > IOMMU_PAGE_ENT_COUNT)
+		/*
+		 * Map 1:1 for all address spaces for IOMEM.
+		 * 	Some devices have own IOMEM areas far from the RAM space.
+		 */
+		if (j * IOMMU_PAGE_ENT_COUNT > g_iommu_info.pdpte_pd_ent_count)
 		{
-			iLoopCnt = IOMMU_PAGE_ENT_COUNT;
-		}
-
-		for (i = 0 ; i < iLoopCnt ; i++)
-		{
-			next_page_table = (u64)sb_get_iommu_pagetable_phy_addr(
-				IOMMU_TYPE_PDEPT, (j * IOMMU_PAGE_ENT_COUNT) + i);
-			pstIOMMU->entry[i] = next_page_table | IOMMU_PAGE_ALL_ACCESS;
-			if (i == 0)
+			for (i = 0 ; i < IOMMU_PAGE_ENT_COUNT ; i++)
 			{
-				sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] %016lX\n",
-					(u64)next_page_table);
+				iommu_info->entry[i] = base_addr | IOMMU_PAGE_ALL_ACCESS | MASK_PAGE_SIZE_FLAG;
+				base_addr += VAL_1GB;
 			}
+
+			continue;
 		}
 
-		clflush_cache_range(pstIOMMU, IOMMU_PAGE_SIZE);
+		loop_cnt = g_iommu_info.pdpte_pd_ent_count - (j * IOMMU_PAGE_ENT_COUNT);
+		if (loop_cnt > IOMMU_PAGE_ENT_COUNT)
+		{
+			loop_cnt = IOMMU_PAGE_ENT_COUNT;
+		}
+
+		for (i = 0 ; i < IOMMU_PAGE_ENT_COUNT ; i++)
+		{
+			if(i < loop_cnt)
+			{
+				next_page_table = (u64)sb_get_iommu_pagetable_phy_addr(
+					IOMMU_TYPE_PDEPT, (j * IOMMU_PAGE_ENT_COUNT) + i);
+				iommu_info->entry[i] = next_page_table | IOMMU_PAGE_ALL_ACCESS;
+
+				if (i == 0)
+				{
+					sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] %016lX\n",
+						(u64)next_page_table);
+				}
+			}
+			else
+			{
+				iommu_info->entry[i] = base_addr | IOMMU_PAGE_ALL_ACCESS | MASK_PAGE_SIZE_FLAG;
+			}
+
+			base_addr += VAL_1GB;
+		}
+		clflush_cache_range(iommu_info, IOMMU_PAGE_SIZE);
 	}
 
 	/* Setup PDEPT. */
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "Setup PDEPT\n");
+	base_addr = 0;
 	for (j = 0 ; j < g_iommu_info.pdept_page_count ; j++)
 	{
-		pstIOMMU = (struct sb_iommu_pagetable*)sb_get_iommu_pagetable_log_addr(
+		iommu_info = (struct sb_iommu_pagetable*)sb_get_iommu_pagetable_log_addr(
 			IOMMU_TYPE_PDEPT, j);
 		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Setup PDEPT [%d] %016lX "
-			"%016lX\n", j, (u64)pstIOMMU, virt_to_phys(pstIOMMU));
-		memset(pstIOMMU, 0, sizeof(struct sb_iommu_pagetable));
+			"%016lX\n", j, (u64)iommu_info, virt_to_phys(iommu_info));
+		memset(iommu_info, 0, sizeof(struct sb_iommu_pagetable));
 
-		iLoopCnt = g_iommu_info.pdept_ent_count - (j * IOMMU_PAGE_ENT_COUNT);
-		if (iLoopCnt > IOMMU_PAGE_ENT_COUNT)
+		loop_cnt = g_iommu_info.pdept_ent_count - (j * IOMMU_PAGE_ENT_COUNT);
+		if (loop_cnt > IOMMU_PAGE_ENT_COUNT)
 		{
-			iLoopCnt = IOMMU_PAGE_ENT_COUNT;
+			loop_cnt = IOMMU_PAGE_ENT_COUNT;
 		}
 
-		for (i = 0 ; i < iLoopCnt ; i++)
+		for (i = 0 ; i < IOMMU_PAGE_ENT_COUNT ; i++)
 		{
-			next_page_table = (u64)sb_get_iommu_pagetable_phy_addr(IOMMU_TYPE_PTE,
-				(j * IOMMU_PAGE_ENT_COUNT) + i);
-			pstIOMMU->entry[i] = next_page_table | IOMMU_PAGE_ALL_ACCESS;
-			if (i == 0)
+			if (i < loop_cnt)
 			{
-				sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] %016lX\n",
-					(u64)next_page_table);
+				next_page_table = (u64)sb_get_iommu_pagetable_phy_addr(IOMMU_TYPE_PTE,
+					(j * IOMMU_PAGE_ENT_COUNT) + i);
+				iommu_info->entry[i] = next_page_table | IOMMU_PAGE_ALL_ACCESS;
+
+				if (i == 0)
+				{
+					sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] %016lX\n",
+						(u64)next_page_table);
+				}
 			}
+			else
+			{
+				iommu_info->entry[i] = base_addr | IOMMU_PAGE_ALL_ACCESS | MASK_PAGE_SIZE_FLAG;
+			}
+
+			base_addr += VAL_2MB;
 		}
-		clflush_cache_range(pstIOMMU, IOMMU_PAGE_SIZE);
+		clflush_cache_range(iommu_info, IOMMU_PAGE_SIZE);
 	}
 
 	/* Setup PTE. */
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "Setup PTE\n");
 	for (j = 0 ; j < g_iommu_info.pte_page_count ; j++)
 	{
-		pstIOMMU = (struct sb_iommu_pagetable*)sb_get_iommu_pagetable_log_addr(
+		iommu_info = (struct sb_iommu_pagetable*)sb_get_iommu_pagetable_log_addr(
 			IOMMU_TYPE_PTE, j);
-		memset(pstIOMMU, 0, sizeof(struct sb_iommu_pagetable));
+		memset(iommu_info, 0, sizeof(struct sb_iommu_pagetable));
 
-		iLoopCnt = g_iommu_info.pte_ent_count - (j * IOMMU_PAGE_ENT_COUNT);
-		if (iLoopCnt > IOMMU_PAGE_ENT_COUNT)
-		{
-			iLoopCnt = IOMMU_PAGE_ENT_COUNT;
-		}
-
-		for (i = 0 ; i < iLoopCnt ; i++)
+		for (i = 0 ; i < IOMMU_PAGE_ENT_COUNT ; i++)
 		{
 			next_page_table = ((u64)j * IOMMU_PAGE_ENT_COUNT + i) * IOMMU_PAGE_SIZE;
-			pstIOMMU->entry[i] = next_page_table | IOMMU_PAGE_ALL_ACCESS;
+			iommu_info->entry[i] = next_page_table | IOMMU_PAGE_ALL_ACCESS;
 		}
-		clflush_cache_range(pstIOMMU, IOMMU_PAGE_SIZE);
+		clflush_cache_range(iommu_info, IOMMU_PAGE_SIZE);
 	}
 }
 
+/*
+ *	Allocate pages for IOMMU internally.
+ */
+static int sb_alloc_iommu_pages_internal(u64 *array, int count)
+{
+	int i;
+
+	for (i = 0 ; i < count ; i++)
+	{
+		array[i] = (u64)__get_free_page(GFP_KERNEL);
+		if (array[i] == 0)
+		{
+			return -1;
+		}
+	}
+	return 0;
+}
+
+/*
+ * Free pages for IOMMU internally.
+ */
+static void sb_free_iommu_pages_internal(u64 *array, int count)
+{
+	int i;
+
+	for (i = 0 ; i < count ; i++)
+	{
+		if (array[i] != 0)
+		{
+			free_page(array[i]);
+		}
+	}
+}
 /*
  * Allocate memory for DMAR table and setup.
  */
@@ -584,17 +652,14 @@ int sb_alloc_iommu_pages(void)
 {
 	struct root_entry* root_entry_table;
 	struct context_entry* context_entry_table;
-	int i;
 
 	g_iommu_info.pml4_ent_count = CEIL(g_max_ram_size, VAL_512GB);
 	g_iommu_info.pdpte_pd_ent_count = CEIL(g_max_ram_size, VAL_1GB);
 	g_iommu_info.pdept_ent_count = CEIL(g_max_ram_size, VAL_2MB);
 	g_iommu_info.pte_ent_count = CEIL(g_max_ram_size, VAL_4KB);
 
-	g_iommu_info.pml4_page_count = CEIL(g_iommu_info.pml4_ent_count,
-		IOMMU_PAGE_ENT_COUNT);
-	g_iommu_info.pdpte_pd_page_count = CEIL(g_iommu_info.pdpte_pd_ent_count,
-		IOMMU_PAGE_ENT_COUNT);
+	g_iommu_info.pml4_page_count = PML4_PAGE_COUNT;
+	g_iommu_info.pdpte_pd_page_count = IOMMU_PAGE_ENT_COUNT;
 	g_iommu_info.pdept_page_count = CEIL(g_iommu_info.pdept_ent_count,
 		IOMMU_PAGE_ENT_COUNT);
 	g_iommu_info.pte_page_count = CEIL(g_iommu_info.pte_ent_count,
@@ -624,68 +689,51 @@ int sb_alloc_iommu_pages(void)
 
 	/* Allocate memory for page table. */
 	g_iommu_info.pml4_page_addr_array =
-		(u64*)vmalloc(g_iommu_info.pml4_page_count * sizeof(u64*));
+		(u64*)vzalloc(g_iommu_info.pml4_page_count * sizeof(u64*));
 	g_iommu_info.pdpte_pd_page_addr_array =
-		(u64*)vmalloc(g_iommu_info.pdpte_pd_page_count * sizeof(u64*));
+		(u64*)vzalloc(g_iommu_info.pdpte_pd_page_count * sizeof(u64*));
 	g_iommu_info.pdept_page_addr_array =
-		(u64*)vmalloc(g_iommu_info.pdept_page_count * sizeof(u64*));
+		(u64*)vzalloc(g_iommu_info.pdept_page_count * sizeof(u64*));
 	g_iommu_info.pte_page_addr_array =
-		(u64*)vmalloc(g_iommu_info.pte_page_count * sizeof(u64*));
+		(u64*)vzalloc(g_iommu_info.pte_page_count * sizeof(u64*));
 
 	if ((g_iommu_info.pml4_page_addr_array == 0) ||
 		(g_iommu_info.pdpte_pd_page_addr_array == 0) ||
 		(g_iommu_info.pdept_page_addr_array == 0) ||
 		(g_iommu_info.pte_page_addr_array == 0))
 	{
-		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "sb_alloc_iommu_pages alloc fail\n");
-		return -1;
+		goto ERROR;
 	}
 
-	for (i = 0 ; i < g_iommu_info.pml4_page_count ; i++)
+	if (sb_alloc_iommu_pages_internal(g_iommu_info.pml4_page_addr_array,
+		g_iommu_info.pml4_page_count) != 0)
 	{
-		g_iommu_info.pml4_page_addr_array[i] = (u64)kmalloc(0x1000,GFP_KERNEL);
-		if (g_iommu_info.pml4_page_addr_array[i] == 0)
-		{
-			sb_printf(LOG_LEVEL_ERROR, LOG_INFO " sb_alloc_iommu_pages alloc fail\n");
-			return -1;
-		}
+		goto ERROR;
 	}
 
-	for (i = 0 ; i < g_iommu_info.pdpte_pd_page_count ; i++)
+	if (sb_alloc_iommu_pages_internal(g_iommu_info.pdpte_pd_page_addr_array,
+		g_iommu_info.pdpte_pd_page_count) != 0)
 	{
-		g_iommu_info.pdpte_pd_page_addr_array[i] = (u64)kmalloc(0x1000,GFP_KERNEL);
-		if (g_iommu_info.pdpte_pd_page_addr_array[i] == 0)
-		{
-			sb_printf(LOG_LEVEL_ERROR, LOG_INFO " sb_alloc_iommu_pages alloc fail\n");
-			return -1;
-		}
+		goto ERROR;
 	}
 
-	for (i = 0 ; i < g_iommu_info.pdept_page_count ; i++)
+	if (sb_alloc_iommu_pages_internal(g_iommu_info.pdept_page_addr_array,
+		g_iommu_info.pdept_page_count) != 0)
 	{
-		g_iommu_info.pdept_page_addr_array[i] = (u64)kmalloc(0x1000,GFP_KERNEL);
-		if (g_iommu_info.pdept_page_addr_array[i] == 0)
-		{
-			sb_printf(LOG_LEVEL_ERROR, LOG_INFO " sb_alloc_iommu_pages alloc fail\n");
-			return -1;
-		}
+		goto ERROR;
 	}
 
-	for (i = 0 ; i < g_iommu_info.pte_page_count ; i++)
+	if (sb_alloc_iommu_pages_internal(g_iommu_info.pte_page_addr_array,
+		g_iommu_info.pte_page_count) != 0)
 	{
-		g_iommu_info.pte_page_addr_array[i] = (u64)kmalloc(0x1000,GFP_KERNEL);
-		if (g_iommu_info.pte_page_addr_array[i] == 0)
-		{
-			sb_printf(LOG_LEVEL_ERROR, LOG_INFO " sb_alloc_iommu_pages alloc fail\n");
-			return -1;
-		}
+		goto ERROR;
 	}
 
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Page Table Memory Alloc Success\n");
 
 	/* Allocate memory for root table and context table. */
-	root_entry_table = (struct root_entry*) kmalloc(0x1000, GFP_KERNEL);
-	context_entry_table = (struct context_entry*) kmalloc(0x1000, GFP_KERNEL);
+	root_entry_table = (struct root_entry*)__get_free_page(GFP_KERNEL);
+	context_entry_table = (struct context_entry*)__get_free_page(GFP_KERNEL);
 	if ((root_entry_table == NULL) || (context_entry_table == NULL))
 	{
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO " sb_alloc_iommu_pages alloc fail\n");
@@ -701,46 +749,63 @@ int sb_alloc_iommu_pages(void)
 	g_iommu_info.context_entry_table_addr = (u64*)context_entry_table;
 
 	return 0;
+
+ERROR:
+	sb_printf(LOG_LEVEL_ERROR, LOG_INFO "sb_alloc_iommu_pages alloc fail\n");
+	return -1;
 }
 
 /*
  * Free allocated memory for DMAR.
+ *	The pages which already used by DMAR should not be free.
  */
 void sb_free_iommu_pages(void)
 {
 	if (g_iommu_info.pml4_page_addr_array != 0)
 	{
-		kfree(g_iommu_info.pml4_page_addr_array);
+		sb_free_iommu_pages_internal(g_iommu_info.pml4_page_addr_array,
+			g_iommu_info.pml4_page_count);
+
+		vfree(g_iommu_info.pml4_page_addr_array);
 		g_iommu_info.pml4_page_addr_array = 0;
 	}
 
 	if (g_iommu_info.pdpte_pd_page_addr_array != 0)
 	{
-		kfree(g_iommu_info.pdpte_pd_page_addr_array);
+		sb_free_iommu_pages_internal(g_iommu_info.pdpte_pd_page_addr_array,
+			g_iommu_info.pdpte_pd_page_count);
+
+		vfree(g_iommu_info.pdpte_pd_page_addr_array);
 		g_iommu_info.pdpte_pd_page_addr_array = 0;
 	}
 
 	if (g_iommu_info.pdept_page_addr_array != 0)
 	{
-		kfree(g_iommu_info.pdept_page_addr_array);
+		sb_free_iommu_pages_internal(g_iommu_info.pdept_page_addr_array,
+			g_iommu_info.pdept_page_count);
+
+		vfree(g_iommu_info.pdept_page_addr_array);
 		g_iommu_info.pdept_page_addr_array = 0;
 	}
 
 	if (g_iommu_info.pte_page_addr_array != 0)
 	{
-		kfree(g_iommu_info.pte_page_addr_array);
+		sb_free_iommu_pages_internal(g_iommu_info.pte_page_addr_array,
+			g_iommu_info.pte_page_count);
+
+		vfree(g_iommu_info.pte_page_addr_array);
 		g_iommu_info.pte_page_addr_array = 0;
 	}
 
 	if (g_iommu_info.root_entry_table_addr != 0)
 	{
-		kfree(g_iommu_info.root_entry_table_addr);
+		free_page((u64)g_iommu_info.root_entry_table_addr);
 		g_iommu_info.root_entry_table_addr = 0;
 	}
 
 	if (g_iommu_info.context_entry_table_addr != 0)
 	{
-		kfree(g_iommu_info.context_entry_table_addr);
+		free_page((u64)g_iommu_info.context_entry_table_addr);
 		g_iommu_info.context_entry_table_addr  = 0;
 	}
 }
@@ -829,33 +894,33 @@ void sb_protect_iommu_pages(void)
 
 	for (i = 0 ; i < g_iommu_info.pml4_page_count ; i++)
 	{
-		end = (u64)g_iommu_info.pml4_page_addr_array[i] + 0x1000;
+		end = (u64)g_iommu_info.pml4_page_addr_array[i] + VAL_4KB;
 		sb_hide_range((u64)g_iommu_info.pml4_page_addr_array[i], end, 0);
 	}
 
 	for (i = 0 ; i < g_iommu_info.pdpte_pd_page_count ; i++)
 	{
-		end = (u64)g_iommu_info.pdpte_pd_page_addr_array[i] + 0x1000;
+		end = (u64)g_iommu_info.pdpte_pd_page_addr_array[i] + VAL_4KB;
 		sb_hide_range((u64)g_iommu_info.pdpte_pd_page_addr_array[i], end, 0);
 	}
 
 	for (i = 0 ; i < g_iommu_info.pdept_page_count ; i++)
 	{
-		end = (u64)g_iommu_info.pdept_page_addr_array[i] + 0x1000;
+		end = (u64)g_iommu_info.pdept_page_addr_array[i] + VAL_4KB;
 		sb_hide_range((u64)g_iommu_info.pdept_page_addr_array[i], end, 0);
 	}
 
 	for (i = 0 ; i < g_iommu_info.pte_page_count ; i++)
 	{
-		end = (u64)g_iommu_info.pte_page_addr_array[i] + 0x1000;
+		end = (u64)g_iommu_info.pte_page_addr_array[i] + VAL_4KB;
 		sb_hide_range((u64)g_iommu_info.pte_page_addr_array[i], end, 0);
 	}
 
 	/* Hide root table and context table. */
-	end = (u64)g_iommu_info.root_entry_table_addr + 0x1000;
+	end = (u64)g_iommu_info.root_entry_table_addr + VAL_4KB;
 	sb_hide_range((u64)g_iommu_info.root_entry_table_addr, end, 0);
 
-	end = (u64)g_iommu_info.context_entry_table_addr + 0x1000;
+	end = (u64)g_iommu_info.context_entry_table_addr + VAL_4KB;
 	sb_hide_range((u64)g_iommu_info.context_entry_table_addr, end, 0);
 
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] Complete\n");

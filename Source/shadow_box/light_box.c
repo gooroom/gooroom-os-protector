@@ -43,6 +43,7 @@
 #include <linux/kfifo.h>
 #include <asm/uaccess.h>
 #include <linux/suspend.h>
+#include <asm/tlbflush.h>
 #include "asm.h"
 #include "shadow_box.h"
 #include "shadow_watcher.h"
@@ -352,14 +353,18 @@ static int __init shadow_box_init(void)
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "totalram_pages %ld, size %ld, "
 		"g_max_ram_size %ld\n", totalram_pages, totalram_pages * VAL_4KB,
 		g_max_ram_size);
+
+	/* Ceiling to 1GBs and adding a buffer. */
 	if (g_max_ram_size < VAL_4GB)
 	{
 		g_max_ram_size = VAL_4GB;
 	}
 	else
 	{
-		g_max_ram_size = g_max_ram_size + VAL_1GB;
+		g_max_ram_size = CEIL(g_max_ram_size, VAL_1GB) * VAL_1GB;
 	}
+	g_max_ram_size = g_max_ram_size + VAL_1GB;
+
 	cpu_id = smp_processor_id();
 	cpu_count = num_online_cpus();
 
@@ -900,14 +905,16 @@ static void sb_alloc_vmcs_memory(void)
 
 	for (i = 0 ; i < cpu_count ; i++)
 	{
-		g_vmx_on_vmcs_log_addr[i] = kmalloc(VMCS_SIZE, GFP_KERNEL | __GFP_COLD);
-		g_guest_vmcs_log_addr[i] = kmalloc(VMCS_SIZE, GFP_KERNEL | __GFP_COLD);
+		g_vmx_on_vmcs_log_addr[i] = (void*)__get_free_pages(GFP_KERNEL | __GFP_COLD,
+			VMCS_SIZE_ORDER);
+		g_guest_vmcs_log_addr[i] = (void*)__get_free_pages(GFP_KERNEL | __GFP_COLD,
+			VMCS_SIZE_ORDER);
 		g_vm_exit_stack_addr[i] = (void*)vmalloc(g_stack_size);
 
-		g_io_bitmap_addrA[i] = kmalloc(IO_BITMAP_SIZE, GFP_KERNEL | __GFP_COLD);
-		g_io_bitmap_addrB[i] = kmalloc(IO_BITMAP_SIZE, GFP_KERNEL | __GFP_COLD);
-		g_msr_bitmap_addr[i] = kmalloc(IO_BITMAP_SIZE, GFP_KERNEL | __GFP_COLD);
-		g_virt_apic_page_addr[i] = kmalloc(VIRT_APIC_PAGE_SIZE, GFP_KERNEL | __GFP_COLD);
+		g_io_bitmap_addrA[i] = (void*)__get_free_page(GFP_KERNEL | __GFP_COLD);
+		g_io_bitmap_addrB[i] = (void*)__get_free_page(GFP_KERNEL | __GFP_COLD);
+		g_msr_bitmap_addr[i] = (void*)__get_free_page(GFP_KERNEL | __GFP_COLD);
+		g_virt_apic_page_addr[i] = (void*)__get_free_page(GFP_KERNEL | __GFP_COLD);
 
 		if ((g_vmx_on_vmcs_log_addr[i] == NULL) || (g_guest_vmcs_log_addr[i] == NULL) ||
 			(g_vm_exit_stack_addr[i] == NULL) || (g_io_bitmap_addrA[i] == NULL) ||
@@ -1012,26 +1019,21 @@ static int sb_is_workaround_addr(u64 addr)
 static int sb_setup_memory_pool(void)
 {
 	u64 i;
-	u64 size;
 
 	spin_lock_init(&g_mem_pool_lock);
 	spin_lock_init(&g_mem_sync_lock);
 
-	/* Allocate 1 page per 2MB */
-	g_memory_pool.max_count = g_max_ram_size / VAL_2MB;
-	size = g_memory_pool.max_count * VAL_4KB;
-	g_memory_pool.pool = NULL;
-
-	g_memory_pool.pool = (u64 *) vmalloc(size);
+	/* Allocate 2 page per 2MB. */
+	g_memory_pool.max_count = g_max_ram_size / VAL_2MB * 2;
+	g_memory_pool.pool = (u64 *)vzalloc(g_memory_pool.max_count * sizeof(u64));
 	if (g_memory_pool.pool == NULL)
 	{
 		goto ERROR;
 	}
 
-	memset(g_memory_pool.pool, 0, sizeof(g_memory_pool.max_count));
 	for (i = 0 ; i < g_memory_pool.max_count ; i++)
 	{
-		g_memory_pool.pool[i] = (u64)kmalloc(VAL_4KB, GFP_KERNEL | __GFP_COLD);
+		g_memory_pool.pool[i] = (u64)__get_free_page(GFP_KERNEL | __GFP_COLD);
 		if (g_memory_pool.pool[i] == 0)
 		{
 			goto ERROR;
@@ -1057,11 +1059,11 @@ ERROR:
 				sb_set_all_access_range((u64)g_memory_pool.pool[i], (u64)g_memory_pool.pool[i] + 
 					VAL_4KB, ALLOC_KMALLOC);
 #endif /* SHADOWBOX_USE_EPT */
-				kfree((void*)g_memory_pool.pool[i]);
+				free_page(g_memory_pool.pool[i]);
 			}
 		}
 
-		kfree(g_memory_pool.pool);
+		vfree(g_memory_pool.pool);
 	}
 
 	return -1;
@@ -1125,7 +1127,7 @@ static int sb_check_gdtr(int cpu_id)
 		return -1;
 	}
 
-	if (gdtr.size >= 0x1000)
+	if (gdtr.size >= VAL_4KB)
 	{
 		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] GDT size is over, Org Addr"
 			" %016lX, Size %d, New Addr %016lX, Size %d\n",
@@ -1172,7 +1174,7 @@ static void sb_lock_range(u64 start_addr, u64 end_addr, int alloc_type)
 
 	align_end_addr = (end_addr + PAGE_SIZE - 1) & MASK_PAGEADDR;
 
-	for (i = (start_addr & MASK_PAGEADDR) ; i < align_end_addr ; i += 0x1000)
+	for (i = (start_addr & MASK_PAGEADDR) ; i < align_end_addr ; i += VAL_4KB)
 	{
 		if (alloc_type == ALLOC_KMALLOC)
 		{
@@ -1203,7 +1205,7 @@ void sb_set_all_access_range(u64 start_addr, u64 end_addr, int alloc_type)
 
 	align_end_addr = (end_addr + PAGE_SIZE - 1) & MASK_PAGEADDR;
 
-	for (i = (start_addr & MASK_PAGEADDR) ; i < align_end_addr ; i += 0x1000)
+	for (i = (start_addr & MASK_PAGEADDR) ; i < align_end_addr ; i += VAL_4KB)
 	{
 		if (alloc_type == ALLOC_KMALLOC)
 		{
@@ -1234,7 +1236,7 @@ void sb_hide_range(u64 start_addr, u64 end_addr, int alloc_type)
 	/* Round up the end address */
 	align_end_addr = (end_addr + PAGE_SIZE - 1) & MASK_PAGEADDR;
 
-	for (i = (start_addr & MASK_PAGEADDR) ; i < align_end_addr ; i += 0x1000)
+	for (i = (start_addr & MASK_PAGEADDR) ; i < align_end_addr ; i += VAL_4KB)
 	{
 		if (alloc_type == ALLOC_KMALLOC)
 		{
@@ -1720,7 +1722,7 @@ u64 vm_check_alloc_page_table(struct sb_pagetable* pagetable, int index)
 			sb_error_log(ERROR_MEMORY_ALLOC_FAIL);
 		}
 
-		memset((void*)value, 0, 0x1000);
+		memset((void*)value, 0, VAL_4KB);
 
 		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "vm_check_alloc_page log %lX, phy %lX \n",
 			value, virt_to_phys((void*)value));
@@ -2141,7 +2143,7 @@ u64 sb_sync_page_table(u64 addr)
 EXIT:
 
 	/* Update page table to CPU. */
-	sb_set_cr3(g_vm_host_phy_pml4);
+	__flush_tlb_one_kernel(addr);
 
 	spin_unlock(&g_mem_sync_lock);
 
@@ -2216,7 +2218,7 @@ static void sb_dup_page_table_for_host(int reinitialize)
 		}
 
 		/* Allocate PDPTE_PD and copy. */
-		vm_pml4->entry[i] = (u64)kmalloc(0x1000, GFP_KERNEL | GFP_ATOMIC |
+		vm_pml4->entry[i] = (u64)__get_free_page(GFP_KERNEL | GFP_ATOMIC |
 			__GFP_COLD | __GFP_ZERO);
 #if SHADOWBOX_USE_EPT
 		sb_hide_range((u64)vm_pml4->entry[i], (u64)(vm_pml4->entry[i]) + PAGE_SIZE,
@@ -2243,7 +2245,7 @@ static void sb_dup_page_table_for_host(int reinitialize)
 			}
 
 			/* Allocate PDEPT and copy. */
-			vm_pdpte_pd->entry[j] = (u64)kmalloc(0x1000, GFP_KERNEL | GFP_ATOMIC |
+			vm_pdpte_pd->entry[j] = (u64)__get_free_page(GFP_KERNEL | GFP_ATOMIC |
 				__GFP_COLD | __GFP_ZERO);
 #if SHADOWBOX_USE_EPT
 			sb_hide_range((u64)vm_pdpte_pd->entry[j], (u64)(vm_pdpte_pd->entry[j]) +
@@ -2271,7 +2273,7 @@ static void sb_dup_page_table_for_host(int reinitialize)
 				}
 
 				/* Allocate PTE and copy. */
-				vm_pdept->entry[k] = (u64)kmalloc(0x1000, GFP_KERNEL | GFP_ATOMIC |
+				vm_pdept->entry[k] = (u64)__get_free_page(GFP_KERNEL | GFP_ATOMIC |
 					__GFP_COLD | __GFP_ZERO);
 #if SHADOWBOX_USE_EPT
 				sb_hide_range((u64)vm_pdept->entry[k], (u64)(vm_pdept->entry[k]) + PAGE_SIZE,
@@ -2290,7 +2292,7 @@ static void sb_dup_page_table_for_host(int reinitialize)
 					" %016lX %016lp %016lp\n", k, org_pdept->entry[k], org_pte,
 					vm_pte);
 
-				memcpy(vm_pte, org_pte, 0x1000);
+				memcpy(vm_pte, org_pte, VAL_4KB);
 			}
 		}
 	}
@@ -2721,7 +2723,7 @@ static int sb_init_vmx(int cpu_id)
 
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "Preparing Geust\n");
 
-	/* Allocate kernel memory for Guest VCMS */
+	/* Allocate kernel memory for Guest VMCS. */
 	guest_VMCS_log_addr = (u32*)(g_guest_vmcs_log_addr[cpu_id]);
 	guest_VMCS_phy_addr = (u32*)virt_to_phys(guest_VMCS_log_addr);
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Alloc Physical Guest VMCS %016lX\n",
@@ -2732,11 +2734,11 @@ static int sb_init_vmx(int cpu_id)
 	result = sb_clear_vmcs(&guest_VMCS_phy_addr);
 	if (result == 0)
 	{
-		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Guest VCMS Clear Success\n");
+		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Guest VMCS Clear Success\n");
 	}
 	else
 	{
-		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "    [*] Guest VCMS Clear Fail\n");
+		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "    [*] Guest VMCS Clear Fail\n");
 		sb_error_log(ERROR_LAUNCH_FAIL);
 		return -1;
 	}
@@ -2744,11 +2746,11 @@ static int sb_init_vmx(int cpu_id)
 	result = sb_load_vmcs((void**)&guest_VMCS_phy_addr);
 	if (result == 0)
 	{
-		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Guest VCMS Load Success\n");
+		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Guest VMCS Load Success\n");
 	}
 	else
 	{
-		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "    [*] Guest VCMS Load Fail\n");
+		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "    [*] Guest VMCS Load Fail\n");
 		sb_error_log(ERROR_LAUNCH_FAIL);
 		return -1;
 	}
@@ -4041,7 +4043,7 @@ static void sb_setup_vm_host_register(struct sb_vm_host_register* sb_vm_host_reg
 	sb_vm_host_register->cr3 = g_vm_host_phy_pml4;
 	sb_vm_host_register->cr4 = sb_get_cr4();
 
-	sb_vm_host_register->rsp = (u64)vm_exit_stack + stack_size - 0x1000;
+	sb_vm_host_register->rsp = (u64)vm_exit_stack + stack_size - VAL_4KB;
 	sb_vm_host_register->rip = (u64)sb_vm_exit_callback_stub;
 
 	sb_vm_host_register->cs_selector = __KERNEL_CS;
@@ -4410,10 +4412,10 @@ static void sb_setup_vm_control_register(struct sb_vm_control_register*
 	sb_vm_control_register->msr_bitmap_addr = (u64)(g_msr_bitmap_addr[cpu_id]);
 	sb_vm_control_register->virt_apic_page_addr = (u64)(g_virt_apic_page_addr[cpu_id]);
 
-	memset((char*)sb_vm_control_register->io_bitmap_addrA, 0, 0x1000);
-	memset((char*)sb_vm_control_register->io_bitmap_addrB, 0, 0x1000);
-	memset((char*)sb_vm_control_register->msr_bitmap_addr, 0, 0x1000);
-	memset((char*)sb_vm_control_register->virt_apic_page_addr, 0, 0x1000);
+	memset((char*)sb_vm_control_register->io_bitmap_addrA, 0, VAL_4KB);
+	memset((char*)sb_vm_control_register->io_bitmap_addrB, 0, VAL_4KB);
+	memset((char*)sb_vm_control_register->msr_bitmap_addr, 0, VAL_4KB);
+	memset((char*)sb_vm_control_register->virt_apic_page_addr, 0, VAL_4KB);
 
 	/* Registers related SYSENTER, SYSCALL MSR are write-protected. */
 	sb_vm_set_msr_write_bitmap(sb_vm_control_register, MSR_IA32_SYSENTER_CS);
@@ -4902,7 +4904,7 @@ static void sb_dump_vm_guest_register(struct sb_vm_guest_register* guest_registe
 		guest_register->ia32_sys_enter_esp);
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] IA32 SYSENTER EIP %016lX\n",
 		guest_register->ia32_sys_enter_eip);
-	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] VCMS Link Ptr     %016lX\n",
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] VMCS Link Ptr     %016lX\n",
 		guest_register->vmcs_link_ptr);
 
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] IA32 Perf Global Ctrl %016lX\n",
