@@ -44,7 +44,9 @@
 volatile int g_module_count = 0;
 volatile int g_task_count = 0;
 volatile u64 g_last_task_check_jiffies = 0;
+#if SHADOWBOX_USE_PERIODIC_MODULE_CHECK
 volatile u64 g_last_module_check_jiffies = 0;
+#endif /* SHADOWBOX_USE_PERIODIC_MODULE_CHECK */
 volatile u64 g_last_dkom_check_jiffies = 0;
 
 static struct sb_task_manager g_task_manager;
@@ -64,7 +66,9 @@ static int sb_add_module_to_sw_module_manager(struct module* mod, int protect);
 static int sb_del_task_from_sw_task_manager(pid_t pid, pid_t tgid);
 static int sw_del_module_from_sw_module_manager(int cpu_id, struct module* mod);
 static void sb_check_sw_task_periodic(int cpu_id);
+#if SHADOWBOX_USE_PERIODIC_MODULE_CHECK
 static void sb_check_sw_module_periodic(int cpu_id);
+#endif /* SHADOWBOX_USE_PERIODIC_MODULE_CHECK */
 static int sb_check_sw_module_list(int cpu_id);
 static int sb_get_module_count(void);
 static int sb_check_sw_vfs_object(int cpu_id);
@@ -245,6 +249,8 @@ static void sb_check_sw_task_periodic(int cpu_id)
 
 }
 
+#if SHADOWBOX_USE_PERIODIC_MODULE_CHECK
+
 /*
  * Check module list periodically in VM timer.
  */
@@ -269,6 +275,8 @@ static void sb_check_sw_module_periodic(int cpu_id)
 		g_last_module_check_jiffies = 0;
 	}
 }
+
+#endif /* SHADOWBOX_USE_PERIODIC_MODULE_CHECK */
 
 /*
  * Check function pointers periodically in VM timer.
@@ -321,7 +329,9 @@ void sb_sw_callback_vm_timer(int cpu_id)
 	if (sb_is_valid_vm_status(cpu_id) == 1)
 	{
 		sb_check_sw_task_periodic(cpu_id);
+#if SHADOWBOX_USE_PERIODIC_MODULE_CHECK
 		sb_check_sw_module_periodic(cpu_id);
+#endif /* SHADOWBOX_USE_PERIODIC_MODULE_CHECK */
 		sb_check_function_pointers_periodic(cpu_id);
 	}
 }
@@ -585,6 +595,8 @@ void sb_sw_callback_task_switch(int cpu_id)
 void sb_sw_callback_insmod(int cpu_id, struct sb_vm_exit_guest_register* context)
 {
 	struct module *mod;
+	u64 mod_base = 0;
+	u64 mod_ro_size = 0;
 
 	if (g_module_count == 0)
 	{
@@ -593,14 +605,6 @@ void sb_sw_callback_insmod(int cpu_id, struct sb_vm_exit_guest_register* context
 
 	/* Flush previous TLB mappaing. */
 	__flush_tlb_global();
-
-	while (!mutex_trylock(&module_mutex))
-	{
-		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "VM [%d] ==== Module Rmmod Lock Fail ===\n",
-			cpu_id);
-		sb_pause_loop();
-		g_modulelock_fail_count++;
-	}
 
 	/* Get last module information and synchronize before introspection. */
 	mod = (struct module*)context->rdi;
@@ -615,8 +619,12 @@ void sb_sw_callback_insmod(int cpu_id, struct sb_vm_exit_guest_register* context
 	/* Add module with protect option. */
 	if (mod != THIS_MODULE)
 	{
-		sb_check_sw_module_list(cpu_id);
-		/* Check duplication. */
+		/* Sync pages of the module to unload them later. */
+		mod_base = sb_get_module_core_base(mod);
+		mod_ro_size = sb_get_module_core_ro_size(mod);
+		sb_sync_sw_page(mod_base, mod_ro_size);
+
+		/* Check duplication and the module list. */
 		if (!sb_is_in_module_manager(cpu_id, mod))
 		{
 #if SHADOWBOX_USE_EXTRA_MODULE_PROTECTION
@@ -624,13 +632,12 @@ void sb_sw_callback_insmod(int cpu_id, struct sb_vm_exit_guest_register* context
 			sb_add_module_to_sw_module_manager(mod, 1);
 #else
 			sb_add_module_to_sw_module_manager(mod, 0);
-
 #endif
+			sb_check_sw_module_list(cpu_id);
 		}
 	}
 
 EXIT:
-	mutex_unlock(&module_mutex);
 	return ;
 }
 
@@ -686,6 +693,8 @@ void sb_sw_callback_rmmod(int cpu_id, struct sb_vm_exit_guest_register* context)
 				mod_base = node->base;
 				mod_ro_size = node->size;
 			}
+
+			sb_sync_sw_page(mod_base, mod_ro_size);
 
 			/* Release all memory and give all permission to physical pages. */
 			sb_delete_and_unprotect_module_ro(mod_base, mod_ro_size);

@@ -19,23 +19,6 @@
 #define SHADOWBOX_VERSION				"2.4.0"
 
 /* Feature list of Shadow-box. */
-/*
- * IOMMU is experimental feature. If you want to enable this feature, you should
- * check if your system supports VT-d technology, and VT-d should be enabled.
- * If IOMMU feature is loaded, all IOMMU registers and tables is locked. So
- * IRQ balancing feature in Linux kernel will fail. Therefore turn off the
- * irqbalance service using "sudo service irqbalance stop".
- *
- * If you have still problems when you run Shadow-box, turn off this feature.
- */
-#define SHADOWBOX_USE_IOMMU				1
-/* If you want to use tboot, turn on this feature. */
-#define SHADOWBOX_USE_TBOOT				1
-/*
- * Kernel patch workaround is experimental feature. If you want to use code
- * patch workaround, turn on this feature.
- */
-#define SHADOWBOX_USE_WORKAROUND		0
 
 /* These features should be set. */
 #define SHADOWBOX_USE_EPT				1
@@ -46,10 +29,31 @@
 #define SHADOWBOX_USE_PRE_SYMBOL		1
 #define SHADOWBOX_USE_I915_WORKAROUND	1
 #define SHADOWBOX_USE_SLEEP				1
+/* If you want to use tboot, turn on this feature. */
+#define SHADOWBOX_USE_TBOOT				1
+
 
 /* These features are options. */
-#define SHADOWBOX_USE_VPID						0
 #define SHADOWBOX_USE_EXTRA_MODULE_PROTECTION	1
+
+
+/* These features are experimental and unstable. */
+/*
+ * If you want to enable IOMMU feature, you should check if your system
+ * supports VT-d technology, and VT-d should be enabled.
+ * If IOMMU feature is loaded, all IOMMU registers and tables is locked. So
+ * IRQ balancing feature in Linux kernel will fail. Therefore turn off the
+ * irqbalance service using "sudo service irqbalance stop".
+ *
+ * If you have still problems when you run Shadow-box, turn off this feature.
+ */
+#define SHADOWBOX_USE_IOMMU						1
+/* If you want to check module list periodically, turn on this feature. */
+#define SHADOWBOX_USE_PERIODIC_MODULE_CHECK		0
+/* If you want to use code patch workaround, turn on this feature. */
+#define SHADOWBOX_USE_WORKAROUND				0
+#define SHADOWBOX_USE_VPID						0
+
 
 /*
  * Debug macros.

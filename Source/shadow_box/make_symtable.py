@@ -47,8 +47,8 @@ def get_symbol_table_from_file(filename):
 		"init_top_pgt",		# upper v4.13.0
 		"init_mm",
 		"wake_up_new_task",
-		"proc_flush_task",					
-		"do_init_module",
+		"proc_flush_task",
+		"trim_init_extable",
 		"module_bug_cleanup",
 		"walk_system_ram_range",
 

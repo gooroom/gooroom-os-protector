@@ -115,7 +115,7 @@ rwlock_t* g_tasklist_lock;
 u64 g_max_ram_size = 0;
 struct sb_memory_pool_struct g_memory_pool = {0, };
 int g_ro_array_count = 0;
-struct ro_addr_struct g_ro_array[MAX_RO_ARRAY_COUNT];
+struct ro_addr_struct g_ro_array[MAX_RO_ARRAY_COUNT] = {0, };
 struct sb_workaround g_workaround = {{0, }, {0, }};
 struct sb_share_context* g_share_context = NULL;
 atomic_t g_is_shutdown_trigger_set = {0, };
@@ -1422,6 +1422,9 @@ void sb_add_and_protect_module_ro(struct module* mod)
 	{
 #if SHADOWBOX_USE_EPT
 		sb_lock_range(mod_core_base, mod_core_base + mod_core_ro_size, ALLOC_VMALLOC);
+
+		/* Module list can be chagned, so make a module structure mutable. */
+		sb_set_all_access_range((u64)mod, (u64)mod + sizeof(struct module), ALLOC_VMALLOC);
 #endif
 		sb_add_ro_area(mod_core_base, mod_core_base + mod_core_ro_size, RO_MODULE);
 	}
@@ -4117,7 +4120,7 @@ static void sb_setup_vm_guest_register(struct sb_vm_guest_register*
 #if SHADOWBOX_USE_HW_BREAKPOINT
 	set_debugreg(sb_get_symbol_address("wake_up_new_task"), 0);
 	set_debugreg(sb_get_symbol_address("proc_flush_task"), 1);
-	set_debugreg(sb_get_symbol_address("do_init_module"), 2);
+	set_debugreg(sb_get_symbol_address("trim_init_extable"), 2);
 	set_debugreg(sb_get_symbol_address("module_bug_cleanup"), 3);
 
 	dr7 = sb_encode_dr7(0, X86_BREAKPOINT_LEN_X, X86_BREAKPOINT_EXECUTE);
@@ -4992,10 +4995,39 @@ static u64 sb_get_desc_access(u64 offset)
  */
 void sb_add_ro_area(u64 start, u64 end, u64 ro_type)
 {
-	g_ro_array[g_ro_array_count].start = start;
-	g_ro_array[g_ro_array_count].end = end;
-	g_ro_array[g_ro_array_count].type = ro_type;
-	g_ro_array_count++;
+	int cpu_id;
+	int i;
+
+	cpu_id = smp_processor_id();
+
+	if (g_ro_array_count >= MAX_RO_ARRAY_COUNT)
+	{
+		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] RO array count is over\n", cpu_id);
+		return ;
+	}
+
+	/* Find empty space. */
+	for (i = 0 ; i < g_ro_array_count ; i++)
+	{
+		if ((g_ro_array[i].start == 0) && (g_ro_array[i].end == 0))
+		{
+			break;
+		}
+	}
+
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] RO array index [%d] "
+		"ro_array_count [%d] start[%016lX] end[%016lX] is added\n",
+		cpu_id, i, g_ro_array_count, start, end);
+
+	g_ro_array[i].start = start;
+	g_ro_array[i].end = end;
+	g_ro_array[i].type = ro_type;
+
+	/* No empty slot, then increase g_ro_array_count. */
+	if (i == g_ro_array_count)
+	{
+		g_ro_array_count++;
+	}
 }
 
 /*
@@ -5007,11 +5039,10 @@ void sb_delete_ro_area(u64 start, u64 end)
 
 	for (i = 0 ; i < g_ro_array_count ; i++)
 	{
-		if ((g_ro_array[g_ro_array_count].start == start) &&
-		    (g_ro_array[g_ro_array_count].end == end))
+		if ((g_ro_array[i].start == start) && (g_ro_array[i].end == end))
 		{
-			g_ro_array[g_ro_array_count].start = 0;
-			g_ro_array[g_ro_array_count].end = 0;
+			g_ro_array[i].start = 0;
+			g_ro_array[i].end = 0;
 			break;
 		}
 	}
@@ -5039,8 +5070,6 @@ int sb_is_addr_in_ro_area(void* addr)
 			return 1;
 		}
 	}
-
-	//sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "%p is not in code area\n", addr);
 
 	return 0;
 }
