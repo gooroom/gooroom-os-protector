@@ -3102,11 +3102,9 @@ static void sb_vm_exit_callback_int(int cpu_id, unsigned long dr6, struct
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] NMI Interrupt Occured\n", cpu_id);
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] ===================WARNING======================\n",
 			cpu_id);
-		sb_hang("NMI fault\n");
 	}
 	else if (vector != VM_INT_DEBUG_EXCEPTION)
 	{
-		sb_remove_int_exception_from_vm(vector);
 		return ;
 	}
 
