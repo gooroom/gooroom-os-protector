@@ -1435,12 +1435,17 @@ void sb_add_and_protect_module_ro(struct module* mod)
  */
 void sb_delete_and_unprotect_module_ro(u64 mod_core_base, u64 mod_core_ro_size)
 {
+	int result;
+
 	if ((mod_core_base != 0) && (mod_core_ro_size != 0))
 	{
+		result = sb_delete_ro_area(mod_core_base, mod_core_base + mod_core_ro_size);
+		if (result == 0)
+		{
 #if SHADOWBOX_USE_EPT
-		sb_set_all_access_range(mod_core_base, mod_core_base + mod_core_ro_size, ALLOC_VMALLOC);
+			sb_set_all_access_range(mod_core_base, mod_core_base + mod_core_ro_size, ALLOC_VMALLOC);
 #endif
-		sb_delete_ro_area(mod_core_base, mod_core_base + mod_core_ro_size);
+		}
 	}
 }
 
@@ -4118,7 +4123,7 @@ static void sb_setup_vm_guest_register(struct sb_vm_guest_register*
 #if SHADOWBOX_USE_HW_BREAKPOINT
 	set_debugreg(sb_get_symbol_address("wake_up_new_task"), 0);
 	set_debugreg(sb_get_symbol_address("proc_flush_task"), 1);
-	set_debugreg(sb_get_symbol_address("trim_init_extable"), 2);
+	set_debugreg(sb_get_symbol_address("module_bug_finalize"), 2);
 	set_debugreg(sb_get_symbol_address("module_bug_cleanup"), 3);
 
 	dr7 = sb_encode_dr7(0, X86_BREAKPOINT_LEN_X, X86_BREAKPOINT_EXECUTE);
@@ -5031,7 +5036,7 @@ void sb_add_ro_area(u64 start, u64 end, u64 ro_type)
 /*
  * Delete read-only area (static kernel objects) information with the type.
  */
-void sb_delete_ro_area(u64 start, u64 end)
+int sb_delete_ro_area(u64 start, u64 end)
 {
 	int i;
 
@@ -5041,9 +5046,12 @@ void sb_delete_ro_area(u64 start, u64 end)
 		{
 			g_ro_array[i].start = 0;
 			g_ro_array[i].end = 0;
-			break;
+
+			return 0;
 		}
 	}
+
+	return -1;
 }
 
 /*

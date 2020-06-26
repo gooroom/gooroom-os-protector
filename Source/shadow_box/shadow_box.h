@@ -32,9 +32,10 @@
 /* If you want to use tboot, turn on this feature. */
 #define SHADOWBOX_USE_TBOOT				1
 
-
 /* These features are options. */
-#define SHADOWBOX_USE_EXTRA_MODULE_PROTECTION	1
+#define SHADOWBOX_USE_EXTRA_MODULE_PROTECTION		1
+#define SHADOWBOX_USE_TERMINATE_MALICIOUS_PROCESS	1
+#define SHADOWBOX_USE_TERMINATE_MALICIOUS_MODULE	1
 
 
 /* These features are experimental and unstable. */
@@ -114,7 +115,7 @@
 #define MAX_STACK_SIZE						0x800000
 
 #define WORK_AROUND_MAX_COUNT				30
-#define SYMBOL_MAX_COUNT					25
+#define SYMBOL_MAX_COUNT					26
 
 #define VMCS_SIZE							0x2000
 #define VMCS_SIZE_ORDER						(VMCS_SIZE / VAL_4KB - 1)
@@ -811,7 +812,7 @@ void sb_hang(char* string);
 void sb_add_ro_area(u64 start, u64 end, u64 ro_type);
 int sb_is_addr_in_ro_area(void* addr);
 int sb_is_addr_in_kernel_ro_area(void* addr);
-void sb_delete_ro_area(u64 start, u64 end);
+int sb_delete_ro_area(u64 start, u64 end);
 void sb_insert_exception_to_vm(void);
 void sb_vm_exit_callback(struct sb_vm_exit_guest_register* guest_context);
 u64 sb_get_symbol_address(char* symbol);

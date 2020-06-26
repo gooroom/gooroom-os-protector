@@ -58,6 +58,12 @@ static int g_vfs_object_attack_detected = 0;
 static int g_net_object_attack_detected = 0;
 static struct module* g_helper_module = NULL;
 
+#if SHADOWBOX_USE_TERMINATE_MALICIOUS_PROCESS
+typedef int (*sb_do_send_sig_info)(int sig, struct siginfo *info,
+	struct task_struct *p, enum pid_type type);
+static sb_do_send_sig_info g_do_send_sig_info_fp;
+#endif /* SHADOWBOX_USE_TERMINATE_MALICIOUS_PROCESS */
+
 /*
  * Functions.
  */
@@ -69,7 +75,7 @@ static void sb_check_sw_task_periodic(int cpu_id);
 #if SHADOWBOX_USE_PERIODIC_MODULE_CHECK
 static void sb_check_sw_module_periodic(int cpu_id);
 #endif /* SHADOWBOX_USE_PERIODIC_MODULE_CHECK */
-static int sb_check_sw_module_list(int cpu_id);
+static int sb_check_sw_module_list(int cpu_id, struct module* removed_or_added_mod);
 static int sb_get_module_count(void);
 static int sb_check_sw_vfs_object(int cpu_id);
 static int sb_check_sw_net_object(int cpu_id);
@@ -144,6 +150,11 @@ int sb_prepare_shadow_watcher(void)
 	{
 		list_add(&(g_module_manager.pool[i].list), &(g_module_manager.free_node_head));
 	}
+
+#if SHADOWBOX_USE_TERMINATE_MALICIOUS_PROCESS
+	g_do_send_sig_info_fp = (sb_do_send_sig_info)sb_get_symbol_address("do_send_sig_info");
+#endif /* SHADOWBOX_USE_TERMINATE_MALICIOUS_PROCESS */
+
 	sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "    [*] Complete\n");
 
 	return 0;
@@ -266,7 +277,7 @@ static void sb_check_sw_module_periodic(int cpu_id)
 		/* Flush previous TLB mappaing. */
 		__flush_tlb_global();
 
-		sb_check_sw_module_list(cpu_id);
+		sb_check_sw_module_list(cpu_id, NULL);
 		mutex_unlock(&module_mutex);
 	}
 	else
@@ -568,6 +579,14 @@ static int sb_check_sw_task_list(int cpu_id)
 				"TGID=%d fork name=\"%s\" process name=$(\"%s\")\n", cpu_id, ERROR_TASK_HIDDEN,
 				target->pid, target->tgid, target->comm, target->task->comm);
 
+#if SHADOWBOX_USE_TERMINATE_MALICIOUS_PROCESS
+			sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] Terminate the process\n",
+				cpu_id);
+
+			/* Kill the hidden process. */
+			g_do_send_sig_info_fp(SIGKILL, SEND_SIG_PRIV, target->task, PIDTYPE_TGID);
+#endif /* SHADOWBOX_USE_TERMINATE_MALICIOUS_PROCESS */
+
 			sb_del_task_from_sw_task_manager(target->pid, target->tgid);
 		}
 
@@ -595,8 +614,6 @@ void sb_sw_callback_task_switch(int cpu_id)
 void sb_sw_callback_insmod(int cpu_id, struct sb_vm_exit_guest_register* context)
 {
 	struct module *mod;
-	u64 mod_base = 0;
-	u64 mod_ro_size = 0;
 
 	if (g_module_count == 0)
 	{
@@ -607,7 +624,7 @@ void sb_sw_callback_insmod(int cpu_id, struct sb_vm_exit_guest_register* context
 	__flush_tlb_global();
 
 	/* Get last module information and synchronize before introspection. */
-	mod = (struct module*)context->rdi;
+	mod = (struct module*)context->rdx;
 
 	sb_sync_sw_page((u64)mod, sizeof(struct module));
 	sb_sync_sw_page((u64)current, sizeof(struct task_struct));
@@ -619,11 +636,6 @@ void sb_sw_callback_insmod(int cpu_id, struct sb_vm_exit_guest_register* context
 	/* Add module with protect option. */
 	if (mod != THIS_MODULE)
 	{
-		/* Sync pages of the module to unload them later. */
-		mod_base = sb_get_module_core_base(mod);
-		mod_ro_size = sb_get_module_core_ro_size(mod);
-		sb_sync_sw_page(mod_base, mod_ro_size);
-
 		/* Check duplication and the module list. */
 		if (!sb_is_in_module_manager(cpu_id, mod))
 		{
@@ -633,7 +645,7 @@ void sb_sw_callback_insmod(int cpu_id, struct sb_vm_exit_guest_register* context
 #else
 			sb_add_module_to_sw_module_manager(mod, 0);
 #endif
-			sb_check_sw_module_list(cpu_id);
+			sb_check_sw_module_list(cpu_id, mod);
 		}
 	}
 
@@ -694,13 +706,16 @@ void sb_sw_callback_rmmod(int cpu_id, struct sb_vm_exit_guest_register* context)
 				mod_ro_size = node->size;
 			}
 
-			sb_sync_sw_page(mod_base, mod_ro_size);
+			sb_check_sw_module_list(cpu_id, mod);
 
 			/* Release all memory and give all permission to physical pages. */
 			sb_delete_and_unprotect_module_ro(mod_base, mod_ro_size);
 
 			sw_del_module_from_sw_module_manager(cpu_id, mod);
-			sb_check_sw_module_list(cpu_id);
+		}
+		else
+		{
+			sb_check_sw_module_list(cpu_id, NULL);
 		}
 	}
 	else
@@ -747,12 +762,13 @@ static int sb_get_list_count(struct list_head* head)
 /*
  * Check module list.
  */
-static int sb_check_sw_module_list(int cpu_id)
+static int sb_check_sw_module_list(int cpu_id, struct module* removed_or_added_mod)
 {
 	struct list_head *node;
 	struct list_head *next;
 	struct sb_module_node *target;
 	int count;
+	int found = 0;
 
 	count = sb_get_module_count();
 
@@ -774,16 +790,38 @@ static int sb_check_sw_module_list(int cpu_id)
 				continue;
 			}
 
+			/* If the module is about to be removed by rmmod function, skip it. */
+			if (target->module == removed_or_added_mod)
+			{
+				continue;
+			}
+
 			sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] Module count is different, "
 				"expect=%d real=%d\n", cpu_id, g_module_count, count);
 
 			sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] GRMCODE=%06d Hidden module, module "
 				"name=$(\"%s\") ptr=%016lX\n", cpu_id, ERROR_MODULE_HIDDEN, target->name, target->module);
 
+#if SHADOWBOX_USE_TERMINATE_MALICIOUS_MODULE
+			sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] Terminate the module\n", cpu_id);
+
+			/*
+			 * Release all memory and give no permission to physical pages.
+			 * It causes errors when the hidden module executes there.
+			 */
+			sb_delete_and_unprotect_module_ro(target->base, target->size);
+			sb_hide_range(target->base, target->base + target->size, ALLOC_VMALLOC);
+#endif /* SHADOWBOX_USE_TERMINATE_MALICIOUS_MODULE */
+
 			sw_del_module_from_sw_module_manager(cpu_id, target->module);
+
+			found = 1;
 		}
 
-		sb_error_log(ERROR_KERNEL_MODIFICATION);
+		if (found == 1)
+		{
+			sb_error_log(ERROR_KERNEL_MODIFICATION);
+		}
 	}
 
 	return g_module_count;
@@ -806,14 +844,7 @@ static int sb_get_module_count(void)
 	list_for_each(pos, node)
 	{
 		cur = container_of(pos, struct module, list);
-		if (cur != NULL)
-		{
-			sb_sync_sw_page((u64)cur, sizeof(cur));
-
-			sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "kernel module %s, list ptr %016lX, "
-				"phy %016lX module ptr %016lX, phy %016lX\n", cur->name, pos,
-				virt_to_phys(pos), cur, virt_to_phys(pos));
-		}
+		sb_sync_sw_page((u64)(pos->next), sizeof(struct list_head));
 		count++;
 	}
 
@@ -837,7 +868,6 @@ static int sb_is_in_module_list(struct module* target)
 	list_for_each(pos, node)
 	{
 		cur = container_of(pos, struct module, list);
-		sb_sync_sw_page((u64)cur, sizeof(cur));
 		if (cur == target)
 		{
 			find = 1;
