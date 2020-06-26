@@ -184,8 +184,10 @@ static void sb_lock_range(u64 start_addr, u64 end_addr, int alloc_type);
 static void sb_get_function_pointers(void);
 static int sb_is_system_shutdowning(void);
 static void sb_disable_desc_monitor(void);
+#if SHADOWBOX_USE_SLEEP
 static void sb_trigger_shutdown_timer(void);
 static int sb_is_shutdown_timer_expired(void);
+#endif /* SHADOWBOX_USE_SLEEP */
 static void sb_sync_page_table_flag(struct sb_pagetable* vm, struct sb_pagetable*
 	init, int index, u64 addr);
 static void sb_set_reg_value_from_index(struct sb_vm_exit_guest_register*
@@ -649,6 +651,8 @@ static void sb_disable_desc_monitor(void)
 	sb_write_vmcs(VM_CTRL_SEC_PROC_BASED_EXE_CTRL, reg_value);
 }
 
+#if SHADOWBOX_USE_SLEEP
+
 /*
  * Trigger shutdown timer if the system is shutdowning.
  */
@@ -661,10 +665,6 @@ static void sb_trigger_shutdown_timer(void)
 
 	if (atomic_cmpxchg(&g_is_shutdown_trigger_set, 0, 1) == 0)
 	{
-#if SHADOWBOX_USE_IOMMU
-		//sb_unlock_iommu();
-#endif /* SHADOWBOX_USE_IOMMU */
-
 		g_shutdown_jiffies = jiffies;
 	}
 
@@ -697,6 +697,7 @@ static int sb_is_shutdown_timer_expired(void)
 	return 0;
 }
 
+#endif /* SHADOWBOX_USE_SLEEP */
 
 /*
  * Process VM resume fail.
@@ -2863,8 +2864,10 @@ void sb_vm_exit_callback(struct sb_vm_exit_guest_register* guest_context)
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "VM [%d] EXIT Interrupt Info field: %016lX\n",
 		cpu_id, info_field);
 
+#if SHADOWBOX_USE_SLEEP
 	/* Check system is shutdowning and shutdown timer is expired */
 	sb_is_shutdown_timer_expired();
+#endif /* SHADOWBOX_USE_SLEEP */
 
 	sb_write_vmcs(VM_CTRL_VM_ENTRY_INST_LENGTH, 0);
 
@@ -3790,7 +3793,11 @@ static void sb_vm_exit_callback_gdtr_idtr(int cpu_id, struct sb_vm_exit_guest_re
 	}
 	else
 	{
+#if SHADOWBOX_USE_SLEEP
 		sb_disable_desc_monitor();
+#else
+		sb_advance_vm_guest_rip();
+#endif /* SHADOWBOX_USE_SLEEP */
 	}
 }
 
@@ -3900,6 +3907,7 @@ static void sb_vm_exit_callback_ept_violation(int cpu_id, struct sb_vm_exit_gues
 {
 	u64 cr0;
 
+#if SHADOWBOX_USE_SLEEP
 	/* Support suspend and hibernation. */
 	if (guest_linear == (u64) sb_system_sleep_notify)
 	{
@@ -3907,6 +3915,7 @@ static void sb_vm_exit_callback_ept_violation(int cpu_id, struct sb_vm_exit_gues
 		sb_trigger_shutdown_timer();
 		return ;
 	}
+#endif /* SHADOWBOX_USE_SLEEP */
 
 	if (sb_is_system_shutdowning() == 0)
 	{
@@ -3939,10 +3948,14 @@ static void sb_vm_exit_callback_ept_violation(int cpu_id, struct sb_vm_exit_gues
 	}
 	else
 	{
+#if SHADOWBOX_USE_SLEEP
 		if (sb_is_addr_in_kernel_ro_area((void*)guest_linear) == 0)
 		{
 			sb_set_ept_read_only_page(guest_physical);
 		}
+#else
+		sb_advance_vm_guest_rip();
+#endif /* SHADOWBOX_USE_SLEEP */
 	}
 }
 
