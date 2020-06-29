@@ -16,7 +16,7 @@
 /*
  * Macros.
  */
-#define SHADOWBOX_VERSION				"2.4.0"
+#define SHADOWBOX_VERSION				"2.5.0"
 
 /* Feature list of Shadow-box. */
 
@@ -33,7 +33,7 @@
 #define SHADOWBOX_USE_TBOOT				1
 
 /* These features are options. */
-#define SHADOWBOX_USE_EXTRA_MODULE_PROTECTION		1
+#define SHADOWBOX_USE_EXTRA_MODULE_PROTECTION		0
 #define SHADOWBOX_USE_TERMINATE_MALICIOUS_PROCESS	1
 #define SHADOWBOX_USE_TERMINATE_MALICIOUS_MODULE	1
 
@@ -48,7 +48,7 @@
  *
  * If you have still problems when you run Shadow-box, turn off this feature.
  */
-#define SHADOWBOX_USE_IOMMU						1
+#define SHADOWBOX_USE_IOMMU						0
 /* If you want to check module list periodically, turn on this feature. */
 #define SHADOWBOX_USE_PERIODIC_MODULE_CHECK		0
 /* If you want to use code patch workaround, turn on this feature. */
