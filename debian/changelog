@@ -1,3 +1,12 @@
+gooroom-os-protector (2.4.1+4.19.118~2+deb10u1+grm2u1) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [1fe5134c] Released Version 2.4.1+4.19.118_2+deb10u1+grm2u1
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Fri, 10 Jul 2020 18:19:21 +0900
+
 gooroom-os-protector (2.4.1+4.19.67~2+deb10u2+grm2u2) stable; urgency=medium
 
   [ Seunghun Han ]
