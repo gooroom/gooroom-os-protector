@@ -1,3 +1,18 @@
+gooroom-os-protector (2.5.0+4.19.118~2+deb10u1+grm2u1) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [21d6aef7] Reduce the number and the range of locks
+  * [4e348687] Manage pages instead of kmalloc and map all physical range
+  * [89885db2] Fix uninteded context switching with mutex_unlock() and managing RO area bug
+  * [fb22f657] Pass unintended interrupts including NMI to the normal world
+  * [58f9f489] Add terminating malicious processes and modules feature
+  * [3acd6504] Enhance a sleep feature for the unused case
+  * [80f12794] Update version to 2.5.0 and change boot and Shadow-box options for it
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Fri, 31 Jul 2020 11:40:15 +0900
+
 gooroom-os-protector (2.4.1+4.19.118~2+deb10u1+grm2u1) stable; urgency=medium
 
   [ jongkyung.woo ]
