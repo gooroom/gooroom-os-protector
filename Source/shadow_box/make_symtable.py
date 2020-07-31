@@ -47,8 +47,8 @@ def get_symbol_table_from_file(filename):
 		"init_top_pgt",		# upper v4.13.0
 		"init_mm",
 		"wake_up_new_task",
-		"proc_flush_task",					
-		"do_init_module",
+		"proc_flush_task",
+		"module_bug_finalize",
 		"module_bug_cleanup",
 		"walk_system_ram_range",
 
@@ -58,6 +58,9 @@ def get_symbol_table_from_file(filename):
 		"check_interval",
 		"mce_timer_delete_all",
 		"mce_cpu_restart",
+
+		# Symbol for terminating malware
+		"do_send_sig_info",
 
 		# Symbols for Workaround 
 		"__ip_select_ident",

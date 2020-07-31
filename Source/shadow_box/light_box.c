@@ -43,6 +43,7 @@
 #include <linux/kfifo.h>
 #include <asm/uaccess.h>
 #include <linux/suspend.h>
+#include <asm/tlbflush.h>
 #include "asm.h"
 #include "shadow_box.h"
 #include "shadow_watcher.h"
@@ -89,7 +90,6 @@ atomic_t g_thread_rcu_sync_count;
 atomic_t g_sync_flags;
 atomic_t g_complete_flags;
 atomic_t g_framework_init_start_flags;
-atomic_t g_enter_flags;
 atomic_t g_enter_count;
 atomic_t g_first;
 atomic_t g_framework_init_flags;
@@ -115,7 +115,7 @@ rwlock_t* g_tasklist_lock;
 u64 g_max_ram_size = 0;
 struct sb_memory_pool_struct g_memory_pool = {0, };
 int g_ro_array_count = 0;
-struct ro_addr_struct g_ro_array[MAX_RO_ARRAY_COUNT];
+struct ro_addr_struct g_ro_array[MAX_RO_ARRAY_COUNT] = {0, };
 struct sb_workaround g_workaround = {{0, }, {0, }};
 struct sb_share_context* g_share_context = NULL;
 atomic_t g_is_shutdown_trigger_set = {0, };
@@ -184,8 +184,10 @@ static void sb_lock_range(u64 start_addr, u64 end_addr, int alloc_type);
 static void sb_get_function_pointers(void);
 static int sb_is_system_shutdowning(void);
 static void sb_disable_desc_monitor(void);
+#if SHADOWBOX_USE_SLEEP
 static void sb_trigger_shutdown_timer(void);
 static int sb_is_shutdown_timer_expired(void);
+#endif /* SHADOWBOX_USE_SLEEP */
 static void sb_sync_page_table_flag(struct sb_pagetable* vm, struct sb_pagetable*
 	init, int index, u64 addr);
 static void sb_set_reg_value_from_index(struct sb_vm_exit_guest_register*
@@ -353,14 +355,18 @@ static int __init shadow_box_init(void)
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "totalram_pages %ld, size %ld, "
 		"g_max_ram_size %ld\n", totalram_pages, totalram_pages * VAL_4KB,
 		g_max_ram_size);
+
+	/* Ceiling to 1GBs and adding a buffer. */
 	if (g_max_ram_size < VAL_4GB)
 	{
 		g_max_ram_size = VAL_4GB;
 	}
 	else
 	{
-		g_max_ram_size = g_max_ram_size + VAL_1GB;
+		g_max_ram_size = CEIL(g_max_ram_size, VAL_1GB) * VAL_1GB;
 	}
+	g_max_ram_size = g_max_ram_size + VAL_1GB;
+
 	cpu_id = smp_processor_id();
 	cpu_count = num_online_cpus();
 
@@ -447,6 +453,13 @@ static int __init shadow_box_init(void)
 ERROR_HANDLE:
 	sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "Execution Fail\n");
 
+#if SHADOWBOX_USE_IOMMU
+	if (cpu_id == 0)
+	{
+		sb_unlock_iommu();
+	}
+#endif /* SHADOWBOX_USE_IOMMU */
+
 	sb_free_ept_pages();
 	sb_free_iommu_pages();
 	return -1;
@@ -474,7 +487,6 @@ static int sb_start(u64 reinitialize)
 	atomic_set(&g_complete_flags, cpu_count);
 	atomic_set(&g_framework_init_start_flags, cpu_count);
 	atomic_set(&g_first, 1);
-	atomic_set(&g_enter_flags, 0);
 	atomic_set(&g_enter_count, 0);
 	atomic_set(&g_framework_init_flags, cpu_count);
 	atomic_set(&g_iommu_complete_flags, 0);
@@ -639,6 +651,8 @@ static void sb_disable_desc_monitor(void)
 	sb_write_vmcs(VM_CTRL_SEC_PROC_BASED_EXE_CTRL, reg_value);
 }
 
+#if SHADOWBOX_USE_SLEEP
+
 /*
  * Trigger shutdown timer if the system is shutdowning.
  */
@@ -651,10 +665,6 @@ static void sb_trigger_shutdown_timer(void)
 
 	if (atomic_cmpxchg(&g_is_shutdown_trigger_set, 0, 1) == 0)
 	{
-#if SHADOWBOX_USE_IOMMU
-		//sb_unlock_iommu();
-#endif /* SHADOWBOX_USE_IOMMU */
-
 		g_shutdown_jiffies = jiffies;
 	}
 
@@ -687,6 +697,7 @@ static int sb_is_shutdown_timer_expired(void)
 	return 0;
 }
 
+#endif /* SHADOWBOX_USE_SLEEP */
 
 /*
  * Process VM resume fail.
@@ -895,14 +906,16 @@ static void sb_alloc_vmcs_memory(void)
 
 	for (i = 0 ; i < cpu_count ; i++)
 	{
-		g_vmx_on_vmcs_log_addr[i] = kmalloc(VMCS_SIZE, GFP_KERNEL | __GFP_COLD);
-		g_guest_vmcs_log_addr[i] = kmalloc(VMCS_SIZE, GFP_KERNEL | __GFP_COLD);
+		g_vmx_on_vmcs_log_addr[i] = (void*)__get_free_pages(GFP_KERNEL | __GFP_COLD,
+			VMCS_SIZE_ORDER);
+		g_guest_vmcs_log_addr[i] = (void*)__get_free_pages(GFP_KERNEL | __GFP_COLD,
+			VMCS_SIZE_ORDER);
 		g_vm_exit_stack_addr[i] = (void*)vmalloc(g_stack_size);
 
-		g_io_bitmap_addrA[i] = kmalloc(IO_BITMAP_SIZE, GFP_KERNEL | __GFP_COLD);
-		g_io_bitmap_addrB[i] = kmalloc(IO_BITMAP_SIZE, GFP_KERNEL | __GFP_COLD);
-		g_msr_bitmap_addr[i] = kmalloc(IO_BITMAP_SIZE, GFP_KERNEL | __GFP_COLD);
-		g_virt_apic_page_addr[i] = kmalloc(VIRT_APIC_PAGE_SIZE, GFP_KERNEL | __GFP_COLD);
+		g_io_bitmap_addrA[i] = (void*)__get_free_page(GFP_KERNEL | __GFP_COLD);
+		g_io_bitmap_addrB[i] = (void*)__get_free_page(GFP_KERNEL | __GFP_COLD);
+		g_msr_bitmap_addr[i] = (void*)__get_free_page(GFP_KERNEL | __GFP_COLD);
+		g_virt_apic_page_addr[i] = (void*)__get_free_page(GFP_KERNEL | __GFP_COLD);
 
 		if ((g_vmx_on_vmcs_log_addr[i] == NULL) || (g_guest_vmcs_log_addr[i] == NULL) ||
 			(g_vm_exit_stack_addr[i] == NULL) || (g_io_bitmap_addrA[i] == NULL) ||
@@ -1007,26 +1020,21 @@ static int sb_is_workaround_addr(u64 addr)
 static int sb_setup_memory_pool(void)
 {
 	u64 i;
-	u64 size;
 
 	spin_lock_init(&g_mem_pool_lock);
 	spin_lock_init(&g_mem_sync_lock);
 
-	/* Allocate 1 page per 2MB */
-	g_memory_pool.max_count = g_max_ram_size / VAL_2MB;
-	size = g_memory_pool.max_count * VAL_4KB;
-	g_memory_pool.pool = NULL;
-
-	g_memory_pool.pool = (u64 *) vmalloc(size);
+	/* Allocate 2 page per 2MB. */
+	g_memory_pool.max_count = g_max_ram_size / VAL_2MB * 2;
+	g_memory_pool.pool = (u64 *)vzalloc(g_memory_pool.max_count * sizeof(u64));
 	if (g_memory_pool.pool == NULL)
 	{
 		goto ERROR;
 	}
 
-	memset(g_memory_pool.pool, 0, sizeof(g_memory_pool.max_count));
 	for (i = 0 ; i < g_memory_pool.max_count ; i++)
 	{
-		g_memory_pool.pool[i] = (u64)kmalloc(VAL_4KB, GFP_KERNEL | __GFP_COLD);
+		g_memory_pool.pool[i] = (u64)__get_free_page(GFP_KERNEL | __GFP_COLD);
 		if (g_memory_pool.pool[i] == 0)
 		{
 			goto ERROR;
@@ -1052,11 +1060,11 @@ ERROR:
 				sb_set_all_access_range((u64)g_memory_pool.pool[i], (u64)g_memory_pool.pool[i] + 
 					VAL_4KB, ALLOC_KMALLOC);
 #endif /* SHADOWBOX_USE_EPT */
-				kfree((void*)g_memory_pool.pool[i]);
+				free_page(g_memory_pool.pool[i]);
 			}
 		}
 
-		kfree(g_memory_pool.pool);
+		vfree(g_memory_pool.pool);
 	}
 
 	return -1;
@@ -1120,7 +1128,7 @@ static int sb_check_gdtr(int cpu_id)
 		return -1;
 	}
 
-	if (gdtr.size >= 0x1000)
+	if (gdtr.size >= VAL_4KB)
 	{
 		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "VM [%d] GDT size is over, Org Addr"
 			" %016lX, Size %d, New Addr %016lX, Size %d\n",
@@ -1167,7 +1175,7 @@ static void sb_lock_range(u64 start_addr, u64 end_addr, int alloc_type)
 
 	align_end_addr = (end_addr + PAGE_SIZE - 1) & MASK_PAGEADDR;
 
-	for (i = (start_addr & MASK_PAGEADDR) ; i < align_end_addr ; i += 0x1000)
+	for (i = (start_addr & MASK_PAGEADDR) ; i < align_end_addr ; i += VAL_4KB)
 	{
 		if (alloc_type == ALLOC_KMALLOC)
 		{
@@ -1198,7 +1206,7 @@ void sb_set_all_access_range(u64 start_addr, u64 end_addr, int alloc_type)
 
 	align_end_addr = (end_addr + PAGE_SIZE - 1) & MASK_PAGEADDR;
 
-	for (i = (start_addr & MASK_PAGEADDR) ; i < align_end_addr ; i += 0x1000)
+	for (i = (start_addr & MASK_PAGEADDR) ; i < align_end_addr ; i += VAL_4KB)
 	{
 		if (alloc_type == ALLOC_KMALLOC)
 		{
@@ -1229,7 +1237,7 @@ void sb_hide_range(u64 start_addr, u64 end_addr, int alloc_type)
 	/* Round up the end address */
 	align_end_addr = (end_addr + PAGE_SIZE - 1) & MASK_PAGEADDR;
 
-	for (i = (start_addr & MASK_PAGEADDR) ; i < align_end_addr ; i += 0x1000)
+	for (i = (start_addr & MASK_PAGEADDR) ; i < align_end_addr ; i += VAL_4KB)
 	{
 		if (alloc_type == ALLOC_KMALLOC)
 		{
@@ -1415,6 +1423,9 @@ void sb_add_and_protect_module_ro(struct module* mod)
 	{
 #if SHADOWBOX_USE_EPT
 		sb_lock_range(mod_core_base, mod_core_base + mod_core_ro_size, ALLOC_VMALLOC);
+
+		/* Module list can be chagned, so make a module structure mutable. */
+		sb_set_all_access_range((u64)mod, (u64)mod + sizeof(struct module), ALLOC_VMALLOC);
 #endif
 		sb_add_ro_area(mod_core_base, mod_core_base + mod_core_ro_size, RO_MODULE);
 	}
@@ -1425,12 +1436,17 @@ void sb_add_and_protect_module_ro(struct module* mod)
  */
 void sb_delete_and_unprotect_module_ro(u64 mod_core_base, u64 mod_core_ro_size)
 {
+	int result;
+
 	if ((mod_core_base != 0) && (mod_core_ro_size != 0))
 	{
+		result = sb_delete_ro_area(mod_core_base, mod_core_base + mod_core_ro_size);
+		if (result == 0)
+		{
 #if SHADOWBOX_USE_EPT
-		sb_set_all_access_range(mod_core_base, mod_core_base + mod_core_ro_size, ALLOC_VMALLOC);
+			sb_set_all_access_range(mod_core_base, mod_core_base + mod_core_ro_size, ALLOC_VMALLOC);
 #endif
-		sb_delete_ro_area(mod_core_base, mod_core_base + mod_core_ro_size);
+		}
 	}
 }
 
@@ -1715,7 +1731,7 @@ u64 vm_check_alloc_page_table(struct sb_pagetable* pagetable, int index)
 			sb_error_log(ERROR_MEMORY_ALLOC_FAIL);
 		}
 
-		memset((void*)value, 0, 0x1000);
+		memset((void*)value, 0, VAL_4KB);
 
 		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "vm_check_alloc_page log %lX, phy %lX \n",
 			value, virt_to_phys((void*)value));
@@ -2136,7 +2152,7 @@ u64 sb_sync_page_table(u64 addr)
 EXIT:
 
 	/* Update page table to CPU. */
-	sb_set_cr3(g_vm_host_phy_pml4);
+	__flush_tlb_one_kernel(addr);
 
 	spin_unlock(&g_mem_sync_lock);
 
@@ -2211,7 +2227,7 @@ static void sb_dup_page_table_for_host(int reinitialize)
 		}
 
 		/* Allocate PDPTE_PD and copy. */
-		vm_pml4->entry[i] = (u64)kmalloc(0x1000, GFP_KERNEL | GFP_ATOMIC |
+		vm_pml4->entry[i] = (u64)__get_free_page(GFP_KERNEL | GFP_ATOMIC |
 			__GFP_COLD | __GFP_ZERO);
 #if SHADOWBOX_USE_EPT
 		sb_hide_range((u64)vm_pml4->entry[i], (u64)(vm_pml4->entry[i]) + PAGE_SIZE,
@@ -2238,7 +2254,7 @@ static void sb_dup_page_table_for_host(int reinitialize)
 			}
 
 			/* Allocate PDEPT and copy. */
-			vm_pdpte_pd->entry[j] = (u64)kmalloc(0x1000, GFP_KERNEL | GFP_ATOMIC |
+			vm_pdpte_pd->entry[j] = (u64)__get_free_page(GFP_KERNEL | GFP_ATOMIC |
 				__GFP_COLD | __GFP_ZERO);
 #if SHADOWBOX_USE_EPT
 			sb_hide_range((u64)vm_pdpte_pd->entry[j], (u64)(vm_pdpte_pd->entry[j]) +
@@ -2266,7 +2282,7 @@ static void sb_dup_page_table_for_host(int reinitialize)
 				}
 
 				/* Allocate PTE and copy. */
-				vm_pdept->entry[k] = (u64)kmalloc(0x1000, GFP_KERNEL | GFP_ATOMIC |
+				vm_pdept->entry[k] = (u64)__get_free_page(GFP_KERNEL | GFP_ATOMIC |
 					__GFP_COLD | __GFP_ZERO);
 #if SHADOWBOX_USE_EPT
 				sb_hide_range((u64)vm_pdept->entry[k], (u64)(vm_pdept->entry[k]) + PAGE_SIZE,
@@ -2285,7 +2301,7 @@ static void sb_dup_page_table_for_host(int reinitialize)
 					" %016lX %016lp %016lp\n", k, org_pdept->entry[k], org_pte,
 					vm_pte);
 
-				memcpy(vm_pte, org_pte, 0x1000);
+				memcpy(vm_pte, org_pte, VAL_4KB);
 			}
 		}
 	}
@@ -2415,7 +2431,7 @@ static int sb_vm_thread(void* argument)
 	{
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] Host or Guest or Control "
 			"Register alloc fail\n", cpu_id);
-		g_thread_result |= -1;
+		g_thread_result = -1;
 		return -1;
 	}
 
@@ -2424,12 +2440,18 @@ static int sb_vm_thread(void* argument)
 	memset(control_register, 0, sizeof(struct sb_vm_control_register));
 
 	/* Lock module_mutex, and protect module RO area, and syncronize all core. */
-	synchronize_rcu();
+	if (cpu_id == 0)
+	{
+		synchronize_rcu();
+	}
+
 	/* Synchronize processors. */
 	atomic_dec(&g_thread_rcu_sync_count);
 	while(atomic_read(&g_thread_rcu_sync_count) > 0)
 	{
-		schedule();
+		msleep(500);
+		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] wait for synchronize_rcu %d\n",
+			cpu_id, g_thread_rcu_sync_count);
 	}
 
 	if (cpu_id == 0)
@@ -2446,7 +2468,9 @@ static int sb_vm_thread(void* argument)
 	{
 		while (atomic_read(&g_mutex_lock_flags) == 0)
 		{
-			schedule();
+			msleep(500);
+			sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] wait for mutex_lock %d\n",
+				cpu_id, g_mutex_lock_flags);
 		}
 	}
 
@@ -2498,10 +2522,6 @@ static int sb_vm_thread(void* argument)
 	}
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] VM [%d] Complete\n", cpu_id);
 
-	/* Disable interrupt before VM launch */
-	local_irq_save(irqs);
-	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] IRQ Lock complete\n", cpu_id);
-
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] Wait until stable status\n",
 		cpu_id);
 	mdelay(10);
@@ -2536,10 +2556,9 @@ static int sb_vm_thread(void* argument)
 		mdelay(1);
 	}
 
-	/* Initialize VMX */
+	/* Initialize VMX. */
 	if (sb_init_vmx(cpu_id) < 0)
 	{
-		atomic_set(&g_enter_flags, 0);
 		atomic_inc(&g_enter_count);
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] sb_init_vmx fail\n", cpu_id);
 
@@ -2555,9 +2574,11 @@ static int sb_vm_thread(void* argument)
 
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] Launch Start\n", cpu_id);
 
+	/* Disable interrupts before launch and enable again. */
+	local_irq_save(irqs);
 	result = sb_vm_launch();
+	local_irq_restore(irqs);
 
-	atomic_set(&g_enter_flags, 0);
 	atomic_inc(&g_enter_count);
 
 	if (result == -2)
@@ -2600,11 +2621,9 @@ static int sb_vm_thread(void* argument)
 ERROR:
 	if (result != 0)
 	{
-		g_thread_result |= -1;
+		g_thread_result = -1;
 	}
 
-	/* Enable interrupt */
-	local_irq_restore(irqs);
 	preempt_enable();
 
 	if (cpu_id == 0)
@@ -2713,7 +2732,7 @@ static int sb_init_vmx(int cpu_id)
 
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "Preparing Geust\n");
 
-	/* Allocate kernel memory for Guest VCMS */
+	/* Allocate kernel memory for Guest VMCS. */
 	guest_VMCS_log_addr = (u32*)(g_guest_vmcs_log_addr[cpu_id]);
 	guest_VMCS_phy_addr = (u32*)virt_to_phys(guest_VMCS_log_addr);
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Alloc Physical Guest VMCS %016lX\n",
@@ -2724,11 +2743,11 @@ static int sb_init_vmx(int cpu_id)
 	result = sb_clear_vmcs(&guest_VMCS_phy_addr);
 	if (result == 0)
 	{
-		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Guest VCMS Clear Success\n");
+		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Guest VMCS Clear Success\n");
 	}
 	else
 	{
-		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "    [*] Guest VCMS Clear Fail\n");
+		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "    [*] Guest VMCS Clear Fail\n");
 		sb_error_log(ERROR_LAUNCH_FAIL);
 		return -1;
 	}
@@ -2736,11 +2755,11 @@ static int sb_init_vmx(int cpu_id)
 	result = sb_load_vmcs((void**)&guest_VMCS_phy_addr);
 	if (result == 0)
 	{
-		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Guest VCMS Load Success\n");
+		sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Guest VMCS Load Success\n");
 	}
 	else
 	{
-		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "    [*] Guest VCMS Load Fail\n");
+		sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "    [*] Guest VMCS Load Fail\n");
 		sb_error_log(ERROR_LAUNCH_FAIL);
 		return -1;
 	}
@@ -2845,8 +2864,10 @@ void sb_vm_exit_callback(struct sb_vm_exit_guest_register* guest_context)
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "VM [%d] EXIT Interrupt Info field: %016lX\n",
 		cpu_id, info_field);
 
+#if SHADOWBOX_USE_SLEEP
 	/* Check system is shutdowning and shutdown timer is expired */
 	sb_is_shutdown_timer_expired();
+#endif /* SHADOWBOX_USE_SLEEP */
 
 	sb_write_vmcs(VM_CTRL_VM_ENTRY_INST_LENGTH, 0);
 
@@ -3089,11 +3110,9 @@ static void sb_vm_exit_callback_int(int cpu_id, unsigned long dr6, struct
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] NMI Interrupt Occured\n", cpu_id);
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] ===================WARNING======================\n",
 			cpu_id);
-		sb_hang("NMI fault\n");
 	}
 	else if (vector != VM_INT_DEBUG_EXCEPTION)
 	{
-		sb_remove_int_exception_from_vm(vector);
 		return ;
 	}
 
@@ -3774,7 +3793,11 @@ static void sb_vm_exit_callback_gdtr_idtr(int cpu_id, struct sb_vm_exit_guest_re
 	}
 	else
 	{
+#if SHADOWBOX_USE_SLEEP
 		sb_disable_desc_monitor();
+#else
+		sb_advance_vm_guest_rip();
+#endif /* SHADOWBOX_USE_SLEEP */
 	}
 }
 
@@ -3884,6 +3907,7 @@ static void sb_vm_exit_callback_ept_violation(int cpu_id, struct sb_vm_exit_gues
 {
 	u64 cr0;
 
+#if SHADOWBOX_USE_SLEEP
 	/* Support suspend and hibernation. */
 	if (guest_linear == (u64) sb_system_sleep_notify)
 	{
@@ -3891,6 +3915,7 @@ static void sb_vm_exit_callback_ept_violation(int cpu_id, struct sb_vm_exit_gues
 		sb_trigger_shutdown_timer();
 		return ;
 	}
+#endif /* SHADOWBOX_USE_SLEEP */
 
 	if (sb_is_system_shutdowning() == 0)
 	{
@@ -3923,10 +3948,14 @@ static void sb_vm_exit_callback_ept_violation(int cpu_id, struct sb_vm_exit_gues
 	}
 	else
 	{
+#if SHADOWBOX_USE_SLEEP
 		if (sb_is_addr_in_kernel_ro_area((void*)guest_linear) == 0)
 		{
 			sb_set_ept_read_only_page(guest_physical);
 		}
+#else
+		sb_advance_vm_guest_rip();
+#endif /* SHADOWBOX_USE_SLEEP */
 	}
 }
 
@@ -4033,7 +4062,7 @@ static void sb_setup_vm_host_register(struct sb_vm_host_register* sb_vm_host_reg
 	sb_vm_host_register->cr3 = g_vm_host_phy_pml4;
 	sb_vm_host_register->cr4 = sb_get_cr4();
 
-	sb_vm_host_register->rsp = (u64)vm_exit_stack + stack_size - 0x1000;
+	sb_vm_host_register->rsp = (u64)vm_exit_stack + stack_size - VAL_4KB;
 	sb_vm_host_register->rip = (u64)sb_vm_exit_callback_stub;
 
 	sb_vm_host_register->cs_selector = __KERNEL_CS;
@@ -4107,7 +4136,7 @@ static void sb_setup_vm_guest_register(struct sb_vm_guest_register*
 #if SHADOWBOX_USE_HW_BREAKPOINT
 	set_debugreg(sb_get_symbol_address("wake_up_new_task"), 0);
 	set_debugreg(sb_get_symbol_address("proc_flush_task"), 1);
-	set_debugreg(sb_get_symbol_address("do_init_module"), 2);
+	set_debugreg(sb_get_symbol_address("module_bug_finalize"), 2);
 	set_debugreg(sb_get_symbol_address("module_bug_cleanup"), 3);
 
 	dr7 = sb_encode_dr7(0, X86_BREAKPOINT_LEN_X, X86_BREAKPOINT_EXECUTE);
@@ -4402,10 +4431,10 @@ static void sb_setup_vm_control_register(struct sb_vm_control_register*
 	sb_vm_control_register->msr_bitmap_addr = (u64)(g_msr_bitmap_addr[cpu_id]);
 	sb_vm_control_register->virt_apic_page_addr = (u64)(g_virt_apic_page_addr[cpu_id]);
 
-	memset((char*)sb_vm_control_register->io_bitmap_addrA, 0, 0x1000);
-	memset((char*)sb_vm_control_register->io_bitmap_addrB, 0, 0x1000);
-	memset((char*)sb_vm_control_register->msr_bitmap_addr, 0, 0x1000);
-	memset((char*)sb_vm_control_register->virt_apic_page_addr, 0, 0x1000);
+	memset((char*)sb_vm_control_register->io_bitmap_addrA, 0, VAL_4KB);
+	memset((char*)sb_vm_control_register->io_bitmap_addrB, 0, VAL_4KB);
+	memset((char*)sb_vm_control_register->msr_bitmap_addr, 0, VAL_4KB);
+	memset((char*)sb_vm_control_register->virt_apic_page_addr, 0, VAL_4KB);
 
 	/* Registers related SYSENTER, SYSCALL MSR are write-protected. */
 	sb_vm_set_msr_write_bitmap(sb_vm_control_register, MSR_IA32_SYSENTER_CS);
@@ -4894,7 +4923,7 @@ static void sb_dump_vm_guest_register(struct sb_vm_guest_register* guest_registe
 		guest_register->ia32_sys_enter_esp);
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] IA32 SYSENTER EIP %016lX\n",
 		guest_register->ia32_sys_enter_eip);
-	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] VCMS Link Ptr     %016lX\n",
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] VMCS Link Ptr     %016lX\n",
 		guest_register->vmcs_link_ptr);
 
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] IA32 Perf Global Ctrl %016lX\n",
@@ -4982,29 +5011,60 @@ static u64 sb_get_desc_access(u64 offset)
  */
 void sb_add_ro_area(u64 start, u64 end, u64 ro_type)
 {
-	g_ro_array[g_ro_array_count].start = start;
-	g_ro_array[g_ro_array_count].end = end;
-	g_ro_array[g_ro_array_count].type = ro_type;
-	g_ro_array_count++;
+	int cpu_id;
+	int i;
+
+	cpu_id = smp_processor_id();
+
+	if (g_ro_array_count >= MAX_RO_ARRAY_COUNT)
+	{
+		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] RO array count is over\n", cpu_id);
+		return ;
+	}
+
+	/* Find empty space. */
+	for (i = 0 ; i < g_ro_array_count ; i++)
+	{
+		if ((g_ro_array[i].start == 0) && (g_ro_array[i].end == 0))
+		{
+			break;
+		}
+	}
+
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] RO array index [%d] "
+		"ro_array_count [%d] start[%016lX] end[%016lX] is added\n",
+		cpu_id, i, g_ro_array_count, start, end);
+
+	g_ro_array[i].start = start;
+	g_ro_array[i].end = end;
+	g_ro_array[i].type = ro_type;
+
+	/* No empty slot, then increase g_ro_array_count. */
+	if (i == g_ro_array_count)
+	{
+		g_ro_array_count++;
+	}
 }
 
 /*
  * Delete read-only area (static kernel objects) information with the type.
  */
-void sb_delete_ro_area(u64 start, u64 end)
+int sb_delete_ro_area(u64 start, u64 end)
 {
 	int i;
 
 	for (i = 0 ; i < g_ro_array_count ; i++)
 	{
-		if ((g_ro_array[g_ro_array_count].start == start) &&
-		    (g_ro_array[g_ro_array_count].end == end))
+		if ((g_ro_array[i].start == start) && (g_ro_array[i].end == end))
 		{
-			g_ro_array[g_ro_array_count].start = 0;
-			g_ro_array[g_ro_array_count].end = 0;
-			break;
+			g_ro_array[i].start = 0;
+			g_ro_array[i].end = 0;
+
+			return 0;
 		}
 	}
+
+	return -1;
 }
 
 /*
@@ -5029,8 +5089,6 @@ int sb_is_addr_in_ro_area(void* addr)
 			return 1;
 		}
 	}
-
-	//sb_printf(LOG_LEVEL_ERROR, LOG_ERROR "%p is not in code area\n", addr);
 
 	return 0;
 }

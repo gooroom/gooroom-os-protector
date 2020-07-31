@@ -16,26 +16,9 @@
 /*
  * Macros.
  */
-#define SHADOWBOX_VERSION				"2.4.0"
+#define SHADOWBOX_VERSION				"2.5.0"
 
 /* Feature list of Shadow-box. */
-/*
- * IOMMU is experimental feature. If you want to enable this feature, you should
- * check if your system supports VT-d technology, and VT-d should be enabled.
- * If IOMMU feature is loaded, all IOMMU registers and tables is locked. So
- * IRQ balancing feature in Linux kernel will fail. Therefore turn off the
- * irqbalance service using "sudo service irqbalance stop".
- *
- * If you have still problems when you run Shadow-box, turn off this feature.
- */
-#define SHADOWBOX_USE_IOMMU				1
-/* If you want to use tboot, turn on this feature. */
-#define SHADOWBOX_USE_TBOOT				1
-/*
- * Kernel patch workaround is experimental feature. If you want to use code
- * patch workaround, turn on this feature.
- */
-#define SHADOWBOX_USE_WORKAROUND		0
 
 /* These features should be set. */
 #define SHADOWBOX_USE_EPT				1
@@ -46,10 +29,32 @@
 #define SHADOWBOX_USE_PRE_SYMBOL		1
 #define SHADOWBOX_USE_I915_WORKAROUND	1
 #define SHADOWBOX_USE_SLEEP				1
+/* If you want to use tboot, turn on this feature. */
+#define SHADOWBOX_USE_TBOOT				1
 
 /* These features are options. */
+#define SHADOWBOX_USE_EXTRA_MODULE_PROTECTION		0
+#define SHADOWBOX_USE_TERMINATE_MALICIOUS_PROCESS	1
+#define SHADOWBOX_USE_TERMINATE_MALICIOUS_MODULE	1
+
+
+/* These features are experimental and unstable. */
+/*
+ * If you want to enable IOMMU feature, you should check if your system
+ * supports VT-d technology, and VT-d should be enabled.
+ * If IOMMU feature is loaded, all IOMMU registers and tables is locked. So
+ * IRQ balancing feature in Linux kernel will fail. Therefore turn off the
+ * irqbalance service using "sudo service irqbalance stop".
+ *
+ * If you have still problems when you run Shadow-box, turn off this feature.
+ */
+#define SHADOWBOX_USE_IOMMU						0
+/* If you want to check module list periodically, turn on this feature. */
+#define SHADOWBOX_USE_PERIODIC_MODULE_CHECK		0
+/* If you want to use code patch workaround, turn on this feature. */
+#define SHADOWBOX_USE_WORKAROUND				0
 #define SHADOWBOX_USE_VPID						0
-#define SHADOWBOX_USE_EXTRA_MODULE_PROTECTION	1
+
 
 /*
  * Debug macros.
@@ -110,9 +115,10 @@
 #define MAX_STACK_SIZE						0x800000
 
 #define WORK_AROUND_MAX_COUNT				30
-#define SYMBOL_MAX_COUNT					25
+#define SYMBOL_MAX_COUNT					26
 
 #define VMCS_SIZE							0x2000
+#define VMCS_SIZE_ORDER						(VMCS_SIZE / VAL_4KB - 1)
 #define IO_BITMAP_SIZE						0x1000
 #define VIRT_APIC_PAGE_SIZE 				0x1000
 
@@ -806,7 +812,7 @@ void sb_hang(char* string);
 void sb_add_ro_area(u64 start, u64 end, u64 ro_type);
 int sb_is_addr_in_ro_area(void* addr);
 int sb_is_addr_in_kernel_ro_area(void* addr);
-void sb_delete_ro_area(u64 start, u64 end);
+int sb_delete_ro_area(u64 start, u64 end);
 void sb_insert_exception_to_vm(void);
 void sb_vm_exit_callback(struct sb_vm_exit_guest_register* guest_context);
 u64 sb_get_symbol_address(char* symbol);

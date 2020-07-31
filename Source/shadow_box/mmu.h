@@ -24,6 +24,7 @@
 #define VAL_1GB					((u64)1024 * 1024 * 1024)
 #define VAL_2MB					((u64)2 * 1024 * 1024)
 #define VAL_4KB					((u64)4 * 1024)
+#define PML4_PAGE_COUNT			1
 
 /* Page table flags. */
 #define MASK_PAGEFLAG			((u64) 0xFF00000000000FFF)

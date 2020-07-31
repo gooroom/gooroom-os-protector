@@ -3,7 +3,7 @@
 service gbp-daemon status > /dev/null
 ret=$?
 if [ \( $ret -ne 0 \) -a \( $ret -ne 3 \) ]; then
-	sed -i 's/intremap=off //g' /etc/default/grub
+	sed -i 's/intremap=off iommu=force intel_iommu=on //g' /etc/default/grub
 	sed -i 's/pti=off //g' /etc/default/grub
 	update-grub
 fi
