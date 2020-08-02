@@ -80,6 +80,7 @@ u64 g_vm_init_phy_pml4 = 0;
 struct module* g_shadow_box_module = NULL;
 static int g_support_smx = 0;
 static int g_support_xsave = 0;
+static struct desc_ptr g_host_idtr;
 
 atomic_t g_need_init_in_secure = {1};
 volatile int g_allow_shadow_box_hide = 0;
@@ -165,6 +166,7 @@ static void sb_protect_kernel_ro_area(void);
 static void sb_protect_module_list_ro_area(int reinitialize);
 static void sb_protect_vmcs(void);
 static void sb_protect_gdt(int cpu_id);
+static void sb_setup_host_idt_and_protect(void);
 static void sb_protect_shadow_box_module(int protect_mode);
 static void sb_advance_vm_guest_rip(void);
 static u64 sb_calc_vm_pre_timer_value(void);
@@ -183,8 +185,8 @@ static void sb_restore_context_from_vm_guest(int cpu_id, struct sb_vm_full_conte
 static void sb_lock_range(u64 start_addr, u64 end_addr, int alloc_type);
 static void sb_get_function_pointers(void);
 static int sb_is_system_shutdowning(void);
-static void sb_disable_desc_monitor(void);
 #if SHADOWBOX_USE_SLEEP
+static void sb_disable_desc_monitor(void);
 static void sb_trigger_shutdown_timer(void);
 static int sb_is_shutdown_timer_expired(void);
 #endif /* SHADOWBOX_USE_SLEEP */
@@ -410,6 +412,7 @@ static int __init shadow_box_init(void)
 #endif /* SHADOWBOX_USE_IOMMU */
 
 	sb_protect_kernel_ro_area();
+	sb_setup_host_idt_and_protect();
 
 #if SHADOWBOX_USE_EPT
 	sb_protect_ept_pages();
@@ -638,6 +641,8 @@ static int sb_is_system_shutdowning(void)
 	return 1;
 }
 
+#if SHADOWBOX_USE_SLEEP
+
 /*
  * Disable descriptor (GDT, LDT, IDT) monitoring function.
  */
@@ -650,8 +655,6 @@ static void sb_disable_desc_monitor(void)
 	reg_value &= 0xFFFFFFFF;
 	sb_write_vmcs(VM_CTRL_SEC_PROC_BASED_EXE_CTRL, reg_value);
 }
-
-#if SHADOWBOX_USE_SLEEP
 
 /*
  * Trigger shutdown timer if the system is shutdowning.
@@ -1573,7 +1576,7 @@ static void sb_protect_shadow_box_module(int protect_mode)
 }
 
 /*
- * Protect GDT and IDT.
+ * Protect guest's GDT and IDT.
  */
 static void sb_protect_gdt(int cpu_id)
 {
@@ -1588,7 +1591,67 @@ static void sb_protect_gdt(int cpu_id)
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM[%d]    [*] IDTR Base %16lX, Size %d\n", cpu_id, idtr.address, idtr.size);
 
 #if SHADOWBOX_USE_EPT
-	sb_lock_range(idtr.address, (idtr.address + 0xFFF) & MASK_PAGEADDR, ALLOC_VMALLOC);
+	sb_lock_range(idtr.address, (idtr.address + idtr.size) & MASK_PAGEADDR, ALLOC_VMALLOC);
+#endif
+}
+
+/*
+ * Allocate host's IDT and protect it.
+ */
+static void sb_setup_host_idt_and_protect(void)
+{
+	struct desc_ptr idtr;
+	struct gate_struct* idt;
+	int i;
+	u64 handler;
+	void* handlers[22] =
+	{
+		sb_int_callback_stub, sb_int_callback_stub, sb_int_nmi_callback_stub,
+		sb_int_callback_stub, sb_int_callback_stub, sb_int_callback_stub,
+		sb_int_callback_stub, sb_int_callback_stub, sb_int_with_error_callback_stub,
+		sb_int_callback_stub, sb_int_with_error_callback_stub, sb_int_with_error_callback_stub,
+		sb_int_with_error_callback_stub, sb_int_with_error_callback_stub, sb_int_with_error_callback_stub,
+		sb_int_callback_stub, sb_int_callback_stub, sb_int_with_error_callback_stub,
+		sb_int_callback_stub, sb_int_callback_stub, sb_int_callback_stub,
+		sb_int_with_error_callback_stub
+	};
+
+	/* Allocate and setup new handlers. */
+	store_idt(&idtr);
+	memcpy(&g_host_idtr, &idtr, sizeof(struct desc_ptr));
+	g_host_idtr.address = __get_free_page(GFP_KERNEL | GFP_ATOMIC | __GFP_COLD | __GFP_ZERO);
+
+	idt = (struct gate_struct *) g_host_idtr.address;
+	for (i = 0 ; i < VAL_4KB / sizeof(struct desc_ptr) ; i++)
+	{
+		if (i < 22)
+		{
+			handler = (u64)handlers[i];
+		}
+		else
+		{
+			handler = (u64)sb_int_callback_stub;
+		}
+
+		idt->offset_low = (u16)(handler);
+		idt->segment = __KERNEL_CS;
+		idt->bits.ist = DEBUG_STACK;
+		idt->bits.type = GATE_INTERRUPT;
+		idt->bits.dpl = 0;
+		idt->bits.p = 1;
+		idt->offset_middle = (u16)(handler >> 16);
+		idt->offset_high = (u32)(handler >> 32);
+
+		idt++;
+	}
+
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "Setup host's IDT and protect\n");
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] IDTR Base %16lX, Size %d\n",
+		g_host_idtr.address, g_host_idtr.size);
+
+#if SHADOWBOX_USE_EPT
+	sb_hide_range(g_host_idtr.address,
+		(g_host_idtr.address + g_host_idtr.size) & MASK_PAGEADDR, ALLOC_KMALLOC);
 #endif
 }
 
@@ -2988,9 +3051,14 @@ void sb_vm_exit_callback(struct sb_vm_exit_guest_register* guest_context)
 			break;
 
 		case VM_EXIT_REASON_IO_INST:
+			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] VM_EXIT_REASON_IO_INST\n",
+				cpu_id);
+			sb_advance_vm_guest_rip();
+			break;
+
 		case VM_EXIT_REASON_RDMSR:
-			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] VM_EXIT_REASON_IO_INST, "
-				"RDMSR\n", cpu_id);
+			sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] VM_EXIT_REASON_RDMSR %016lX\n",
+				cpu_id, guest_context->rcx);
 			sb_advance_vm_guest_rip();
 			break;
 
@@ -3741,7 +3809,6 @@ void sb_insert_exception_to_vm(void)
 	u64 info_field;
 	sb_read_vmcs(VM_CTRL_VM_ENTRY_INT_INFO_FIELD, &info_field);
 
-	//info_field = VM_BIT_VM_ENTRY_INT_INFO_GP;
 	info_field = VM_BIT_VM_ENTRY_INT_INFO_UD;
 
 	sb_write_vmcs(VM_CTRL_VM_ENTRY_INT_INFO_FIELD, info_field);
@@ -4013,6 +4080,65 @@ static void sb_vm_exit_callback_pre_timer_expired(int cpu_id)
 }
 
 /*
+ * Process interrupts without an error code.
+ *	Do nothing because the guest have to handle these interrupts.
+ */
+void sb_int_callback(void)
+{
+	int cpu_id;
+
+	cpu_id = smp_processor_id();
+
+	/* Update currnt cpu mode. */
+	g_vmx_root_mode[cpu_id] = 1;
+
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] INT callback without an error code\n",
+		cpu_id);
+
+	/* Update currnt cpu mode. */
+	g_vmx_root_mode[cpu_id] = 0;
+}
+
+/*
+ * Process interrupts without an error code.
+ *	Do nothing because the guest have to handle these interrupts.
+ */
+void sb_int_with_error_callback(void)
+{
+	int cpu_id;
+
+	cpu_id = smp_processor_id();
+
+	/* Update currnt cpu mode. */
+	g_vmx_root_mode[cpu_id] = 1;
+
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] INT callback with an error code\n",
+		cpu_id);
+
+	/* Update currnt cpu mode. */
+	g_vmx_root_mode[cpu_id] = 0;
+}
+
+/*
+ * Process interrupts without an error code.
+ *	Do nothing because the guest have to handle these interrupts.
+ */
+void sb_int_nmi_callback(void)
+{
+	int cpu_id;
+
+	cpu_id = smp_processor_id();
+
+	/* Update currnt cpu mode. */
+	g_vmx_root_mode[cpu_id] = 1;
+
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] INT NMI callback\n", cpu_id);
+
+	/* Update currnt cpu mode. */
+	g_vmx_root_mode[cpu_id] = 0;
+}
+
+/*
  * Setup the host registers.
  */
 static void sb_setup_vm_host_register(struct sb_vm_host_register* sb_vm_host_register)
@@ -4086,7 +4212,7 @@ static void sb_setup_vm_host_register(struct sb_vm_host_register* sb_vm_host_reg
 		(base3 << 32);
 
 	sb_vm_host_register->gdtr_base_addr = gdtr.address;
-	sb_vm_host_register->idtr_base_addr = idtr.address;
+	sb_vm_host_register->idtr_base_addr = g_host_idtr.address;
 
 	sb_vm_host_register->ia32_sys_enter_cs = sb_rdmsr(MSR_IA32_SYSENTER_CS);
 	sb_vm_host_register->ia32_sys_enter_esp = sb_rdmsr(MSR_IA32_SYSENTER_ESP);
@@ -4294,7 +4420,7 @@ static void sb_setup_vm_guest_register(struct sb_vm_guest_register*
 	}
 
 	sb_vm_guest_register->gdtr_base_addr = sb_vm_host_register->gdtr_base_addr;
-	sb_vm_guest_register->idtr_base_addr = sb_vm_host_register->idtr_base_addr;
+	sb_vm_guest_register->idtr_base_addr = idtr.address;
 	sb_vm_guest_register->gdtr_limit = gdtr.size;
 	sb_vm_guest_register->idtr_limit = idtr.size;
 

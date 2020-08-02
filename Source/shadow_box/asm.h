@@ -57,4 +57,9 @@ extern void sb_pause_loop(void);
 extern void* sb_vm_call(u64 svr_num, void* arg);
 extern void sb_restore_context_from_stack(u64 stack_addr);
 
+/* Special stub for interrupt handling. */
+extern void sb_int_callback_stub(void);
+extern void sb_int_with_error_callback_stub(void);
+extern void sb_int_nmi_callback_stub(void);
+
 #endif
