@@ -1601,7 +1601,11 @@ static void sb_protect_gdt(int cpu_id)
 static void sb_setup_host_idt_and_protect(void)
 {
 	struct desc_ptr idtr;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 	struct gate_struct* idt;
+#else
+	struct gate_struct64* idt;
+#endif
 	int i;
 	u64 handler;
 	void* handlers[22] =
@@ -1621,7 +1625,11 @@ static void sb_setup_host_idt_and_protect(void)
 	memcpy(&g_host_idtr, &idtr, sizeof(struct desc_ptr));
 	g_host_idtr.address = __get_free_page(GFP_KERNEL | GFP_ATOMIC | __GFP_COLD | __GFP_ZERO);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 	idt = (struct gate_struct *) g_host_idtr.address;
+#else
+	idt = (struct gate_struct64 *) g_host_idtr.address;
+#endif
 	for (i = 0 ; i < VAL_4KB / sizeof(struct desc_ptr) ; i++)
 	{
 		if (i < 22)
@@ -1635,10 +1643,17 @@ static void sb_setup_host_idt_and_protect(void)
 
 		idt->offset_low = (u16)(handler);
 		idt->segment = __KERNEL_CS;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 		idt->bits.ist = DEBUG_STACK;
 		idt->bits.type = GATE_INTERRUPT;
 		idt->bits.dpl = 0;
 		idt->bits.p = 1;
+#else
+		idt->ist = DEBUG_STACK;
+		idt->type = GATE_INTERRUPT;
+		idt->dpl = 0;
+		idt->p = 1;
+#endif
 		idt->offset_middle = (u16)(handler >> 16);
 		idt->offset_high = (u32)(handler >> 32);
 
@@ -2215,7 +2230,11 @@ u64 sb_sync_page_table(u64 addr)
 EXIT:
 
 	/* Update page table to CPU. */
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 14, 20)
 	__flush_tlb_one_kernel(addr);
+#else
+	__flush_tlb_one(addr);
+#endif
 
 	spin_unlock(&g_mem_sync_lock);
 
