@@ -1,3 +1,19 @@
+gooroom-os-protector (2.5.1+4.9.210~1+deb9u1+grm1u1) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [7b6f9b1d] Add a new IDT for handling host's NMI interrupt and change version to 2.5.1
+  * [c8c9238a] Add kernel 4.9.0 support feature
+
+  [ jenkins ]
+  * [2c40813c] Version 2.5.1+4.19.118~2+deb10u1+grm2u1 released
+
+  [ jongkyung.woo ]
+  * [482fd04e] Released Gooroom 1.6
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Sat, 22 Aug 2020 03:16:03 +0900
+
 gooroom-os-protector (2.5.0+4.9.189~3+deb9u1+grm1u1) stable; urgency=medium
 
   [ Seunghun Han ]
