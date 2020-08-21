@@ -1,3 +1,12 @@
+gooroom-os-protector (2.5.1+4.19.118~2+deb10u1+grm2u2) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [c8c9238a] Add kernel 4.9.0 support feature
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Fri, 21 Aug 2020 17:59:00 +0900
+
 gooroom-os-protector (2.5.1+4.19.118~2+deb10u1+grm2u1) stable; urgency=medium
 
   [ Seunghun Han ]
