@@ -51,12 +51,18 @@ global sb_gen_int
 global sb_pause_loop
 global sb_vm_call
 global sb_restore_context_from_stack
+global sb_int_callback_stub
+global sb_int_with_error_callback_stub
+global sb_int_nmi_callback_stub
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Imported functions.
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 extern sb_vm_exit_callback
 extern sb_vm_resume_fail_callback
+extern sb_int_callback
+extern sb_int_with_error_callback
+extern sb_int_nmi_callback
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ; Macros
@@ -500,3 +506,42 @@ sb_restore_context_from_stack:
 	popfq			; Restore RFLAGS.
 
 	ret				; Return to RIP.
+
+; Stub for interrupt without an error code
+; EFLAGS		<- RSP + 16
+; CS			<- RSP + 8
+; EIP 			<- RSP
+ sb_int_callback_stub:
+	PUSHAQ
+
+	call sb_int_callback
+
+	POPAQ
+	iretq
+
+; Stub for interrupt with error code
+; EFLAGS		<- RSP + 24
+; CS			<- RSP + 16
+; EIP			<- RSP + 8
+; Error Code 	<- RSP
+sb_int_with_error_callback_stub:
+	PUSHAQ
+
+	call sb_int_with_error_callback
+
+	POPAQ
+	add rsp, 8		; Remove error code from stack
+	iretq
+
+; Stub for NMI interrupt
+; EFLAGS		<- RSP + 16
+; CS			<- RSP + 8
+; EIP 			<- RSP
+sb_int_nmi_callback_stub:
+	PUSHAQ
+
+	call sb_int_nmi_callback
+
+	POPAQ
+	iretq
+

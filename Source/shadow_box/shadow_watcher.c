@@ -59,8 +59,16 @@ static int g_net_object_attack_detected = 0;
 static struct module* g_helper_module = NULL;
 
 #if SHADOWBOX_USE_TERMINATE_MALICIOUS_PROCESS
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
 typedef int (*sb_do_send_sig_info)(int sig, struct siginfo *info,
 	struct task_struct *p, enum pid_type type);
+#else /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0) */
+typedef int (*sb_do_send_sig_info)(int sig, struct siginfo *info,
+	struct task_struct *p, bool group);
+#define PIDTYPE_TGID		true
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0) */
+
 static sb_do_send_sig_info g_do_send_sig_info_fp;
 #endif /* SHADOWBOX_USE_TERMINATE_MALICIOUS_PROCESS */
 
