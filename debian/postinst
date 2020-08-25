@@ -12,7 +12,7 @@ ret=$?
 dpkg -l | grep -q gooroom-boot-protector
 if [ $? -ne 0 ]; then
     if [ \( $ret -ne 0 \) -a \( $ret -ne 3 \) ]; then
-    	sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=\"/GRUB_CMDLINE_LINUX_DEFAULT=\"intremap=off iommu=force intel_iommu=on /' /etc/default/grub
+    	sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=\"/GRUB_CMDLINE_LINUX_DEFAULT=\"iommu=force intel_iommu=on /' /etc/default/grub
     	update-grub
     fi
 fi
