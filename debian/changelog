@@ -1,3 +1,17 @@
+gooroom-os-protector (2.5.2+4.9.210~1+deb9u1+grm1u1) stable; urgency=medium
+
+  [ jenkins ]
+  * [a170a1d6] Version 2.5.1+4.19.118~2+deb10u1+grm2u2 released
+  * [afeea710] Version 2.5.2+4.19.118~2+deb10u1+grm2u1 released
+
+  [ Seunghun Han ]
+  * [f2ca4540] Fix an IDT entry size bug and enlarge a RO buffer size
+  * [d8f6c92a] Remove useless boot option, intremap=off and prepare for 2.5.2 release
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Wed, 26 Aug 2020 02:13:41 +0900
+
 gooroom-os-protector (2.5.1+4.9.210~1+deb9u1+grm1u1) stable; urgency=medium
 
   [ Seunghun Han ]
