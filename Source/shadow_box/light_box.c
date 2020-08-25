@@ -1606,6 +1606,7 @@ static void sb_setup_host_idt_and_protect(void)
 #else
 	struct gate_struct64* idt;
 #endif
+	int idt_size;
 	int i;
 	u64 handler;
 	void* handlers[22] =
@@ -1627,10 +1628,12 @@ static void sb_setup_host_idt_and_protect(void)
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 	idt = (struct gate_struct *) g_host_idtr.address;
+	idt_size = sizeof(struct gate_struct);
 #else
 	idt = (struct gate_struct64 *) g_host_idtr.address;
+	idt_size = sizeof(struct gate_struct64);
 #endif
-	for (i = 0 ; i < VAL_4KB / sizeof(struct desc_ptr) ; i++)
+	for (i = 0 ; i < VAL_4KB / idt_size ; i++)
 	{
 		if (i < 22)
 		{
