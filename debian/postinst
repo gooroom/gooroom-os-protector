@@ -17,6 +17,10 @@ if [ $? -ne 0 ]; then
     fi
 fi
 
-# Delete previous plka file
-rm -f /etc/polkit-1/localauthority/90-mandatory.d/disable-suspend.pkla
-rm -f /etc/polkit-1/localauthority/90-mandatory.d/disable-hibernate.pkla
+## Delete previous plka file
+#rm -f /etc/polkit-1/localauthority/90-mandatory.d/disable-suspend.pkla
+#rm -f /etc/polkit-1/localauthority/90-mandatory.d/disable-hibernate.pkla
+
+# Ignore power keys for avoiding Samsung Notebook Issue
+sed -i 's/#HandleSuspendKey=suspend/HandleSuspendKey=ignore/; s/#HandleHibernateKey=hibernate/HandleHibernateKey=ignore/; s/#HandleLidSwitch=suspend/HandleLidSwitch=ignore/; s/#HandlePowerKey=poweroff/HandlePowerKey=ignore/' /etc/systemd/logind.conf
+sed -i 's/#xserver-command=X/xserver-command=X -s 0 dpms/' /etc/lightdm/lightdm.conf

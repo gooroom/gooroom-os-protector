@@ -9,5 +9,5 @@ if [ \( $ret -ne 0 \) -a \( $ret -ne 3 \) ]; then
 fi
 
 # Enable hibernate and suspend function in systemd config to support notebook
-sed -i 's/HandleSuspendKey=ignore/#HandleSuspendKey=suspend/; s/HandleHibernateKey=ignore/#HandleHibernateKey=hibernate/; s/HandleLidSwitch=ignore/#HandleLidSwitch=suspend/' /etc/systemd/logind.conf
+sed -i 's/HandleSuspendKey=ignore/#HandleSuspendKey=suspend/; s/HandleHibernateKey=ignore/#HandleHibernateKey=hibernate/; s/HandleLidSwitch=ignore/#HandleLidSwitch=suspend/; s/HandlePowerKey=ignore/#HandlePowerKey=poweroff/' /etc/systemd/logind.conf
 sed -i 's/xserver-command=X -s 0 dpms/#xserver-command=X/' /etc/lightdm/lightdm.conf
