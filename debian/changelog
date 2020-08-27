@@ -1,3 +1,20 @@
+gooroom-os-protector (2.5.2+4.9.210~1+deb9u1+grm1u3) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [804a3af7] Add reboot option for Samsung Notebook
+  * [de58f515] Add logind option for Samsung Notebook Issue
+
+  [ jenkins ]
+  * [3afb7724] Version 2.5.2+4.19.118~2+deb10u1+grm2u2 released
+  * [7a0d87d1] Version 2.5.2+4.19.118~2+deb10u1+grm2u3 released
+
+  [ jongkyung.woo ]
+  * [1f13a346] Revert disable-hibernate.pkla and disable-suspend.pkla for Samsung Notebook Issue
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Fri, 28 Aug 2020 08:03:20 +0900
+
 gooroom-os-protector (2.5.2+4.9.210~1+deb9u1+grm1u2) stable; urgency=medium
 
   [ Seunghun Han ]
