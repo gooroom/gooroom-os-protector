@@ -1,3 +1,15 @@
+gooroom-os-protector (2.5.2+4.19.118~2+deb10u1+grm2u3) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [de58f515] Add logind option for Samsung Notebook Issue
+
+  [ jongkyung.woo ]
+  * [1f13a346] Revert disable-hibernate.pkla and disable-suspend.pkla for Samsung Notebook Issue
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Thu, 27 Aug 2020 22:39:36 +0900
+
 gooroom-os-protector (2.5.2+4.19.118~2+deb10u1+grm2u2) stable; urgency=medium
 
   [ Seunghun Han ]
