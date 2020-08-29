@@ -52,7 +52,7 @@ extern u64 sb_calc_vm_exit_callback_addr(u64 error);
 extern void sb_vm_exit_callback_stub(void);
 extern void sb_invd(void);
 extern void sb_flush_gdtr(void);
-extern void sb_gen_int(u64 number);
+extern void sb_gen_int(void);
 extern void sb_pause_loop(void);
 extern void* sb_vm_call(u64 svr_num, void* arg);
 extern void sb_restore_context_from_stack(u64 stack_addr);
