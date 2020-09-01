@@ -1,3 +1,13 @@
+gooroom-os-protector (2.5.3+4.19.118~2+deb10u1+grm2u1) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [51c994d7] Add reboot code for Samsung Notebook Issue
+  * [9a001151] Change version to 2.5.3
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Tue, 01 Sep 2020 14:29:03 +0900
+
 gooroom-os-protector (2.5.2+4.19.118~2+deb10u1+grm2u3) stable; urgency=medium
 
   [ Seunghun Han ]
