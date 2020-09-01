@@ -630,7 +630,7 @@ static int sb_prepare_log_buffer(void)
  */
 static int sb_is_system_shutdowning(void)
 {
-	if ((system_state == SYSTEM_RUNNING) || (system_state == SYSTEM_BOOTING))
+	if (system_state <= SYSTEM_RUNNING)
 	{
 		if (acpi_target_system_state() < ACPI_STATE_S3)
 		{
@@ -3251,6 +3251,7 @@ static void sb_vm_exit_callback_int(int cpu_id, unsigned long dr6, struct
 static void sb_vm_exit_callback_init_signal(int cpu_id)
 {
 	u64 status;
+	struct desc_ptr idt = { .address = 0, .size = 0 };
 
 	sb_read_vmcs(VM_GUEST_ACTIVITY_STATE, &status);
 	sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] ===================WARNING======================\n",
@@ -3259,6 +3260,21 @@ static void sb_vm_exit_callback_init_signal(int cpu_id)
 		status);
 	sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] ===================WARNING======================\n",
 		cpu_id);
+
+	while(system_state == SYSTEM_RESTART)
+	{
+		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] Wait for system.\n", cpu_id);
+		/* Wait 3 seconds for giving time to the system. */
+		mdelay(3000);
+
+		/* Force generate interrupt without IDT. */
+		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "VM [%d] Invalidate IDT and generate Interrupt.\n", cpu_id);
+
+		load_idt(&idt);
+		sb_stop_vmx();
+		sb_gen_int();
+		sb_pause_loop();
+	}
 }
 
 /*
