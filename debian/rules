@@ -4,8 +4,8 @@ export DEB_CFLAGS_SET=-O2
 
 DHFLAGS=--parallel
 
-UNAME_R=4.19.0-12-amd64
-UNAME_V=\#1 SMP gooroom 4.19.152-1+grm2u1 (2020-10-30)
+UNAME_R=5.10.0-15-amd64
+UNAME_V=\#1 SMP gooroom 5.10.0-15 (2022-06-23)
 
 %:
 	dh $@ --with dkms $(DHFLAGS)
