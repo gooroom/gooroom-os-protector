@@ -22,6 +22,7 @@
 #include <asm/spinlock.h>
 #include <linux/jiffies.h>
 #include <linux/version.h>
+#include <asm/invpcid.h>
 #include "shadow_box.h"
 #include "shadow_watcher.h"
 #include "mmu.h"
@@ -110,6 +111,7 @@ static void sb_validate_sw_module_list(int count_of_module_list);
 
 static void sb_copy_task_list_to_sw_task_manager(void);
 static void sb_copy_module_list_to_sw_module_manager(void);
+static void sb_flush_tlb_global(void);
 
 /*
  * Prepare Shadow-watcher.
@@ -255,7 +257,7 @@ static void sb_check_sw_task_periodic(int cpu_id)
 	if (write_trylock(g_tasklist_lock))
 	{
 		/* Flush previous TLB mappaing. */
-		__flush_tlb_global();
+		sb_flush_tlb_global();
 
 		sb_check_sw_task_list(cpu_id);
 		write_unlock(g_tasklist_lock);
@@ -283,7 +285,7 @@ static void sb_check_sw_module_periodic(int cpu_id)
 	if ((mutex_trylock(&module_mutex)))
 	{
 		/* Flush previous TLB mappaing. */
-		__flush_tlb_global();
+		sb_flush_tlb_global();
 
 		sb_check_sw_module_list(cpu_id, NULL);
 		mutex_unlock(&module_mutex);
@@ -417,7 +419,7 @@ void sb_sw_callback_add_task(int cpu_id, struct sb_vm_exit_guest_register* conte
 	}
 
 	/* Flush previous TLB mappaing. */
-	__flush_tlb_global();
+	sb_flush_tlb_global();
 
 	/* Syncronize before introspection. */
 	sb_sync_sw_page((u64)task, sizeof(struct task_struct));
@@ -471,7 +473,7 @@ void sb_sw_callback_del_task(int cpu_id, struct sb_vm_exit_guest_register* conte
 	}
 
 	/* Flush previous TLB mappaing. */
-	__flush_tlb_global();
+	sb_flush_tlb_global();
 
 	if (sw_is_in_task_list(task))
 	{
@@ -629,7 +631,7 @@ void sb_sw_callback_insmod(int cpu_id, struct sb_vm_exit_guest_register* context
 	}
 
 	/* Flush previous TLB mappaing. */
-	__flush_tlb_global();
+	sb_flush_tlb_global();
 
 	/* Get last module information and synchronize before introspection. */
 	mod = (struct module*)context->rdx;
@@ -681,7 +683,7 @@ void sb_sw_callback_rmmod(int cpu_id, struct sb_vm_exit_guest_register* context)
 	}
 
 	/* Flush previous TLB mappaing. */
-	__flush_tlb_global();
+	sb_flush_tlb_global();
 
 	/* Synchronize before introspection. */
 	mod = (struct module*)context->rdi;
@@ -1037,6 +1039,24 @@ static void sb_copy_module_list_to_sw_module_manager(void)
 		/* Add module with protect option. */
 		sb_add_module_to_sw_module_manager(mod, 1);
 	}
+}
+
+/*
+ * Flush TLB with custom function
+ */
+static void sb_flush_tlb_global(void)
+{
+	u64 cr4;
+
+	if (static_cpu_has(X86_FEATURE_INVPCID))
+	{
+		invpcid_flush_all();
+		return ;
+	}
+
+	cr4 = sb_get_cr4();
+	sb_set_cr4(cr4 ^ X86_CR4_PGE);
+	sb_set_cr4(cr4);
 }
 
 /*
