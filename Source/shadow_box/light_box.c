@@ -3353,8 +3353,9 @@ static void sb_vm_exit_callback_access_cr(int cpu_id, struct sb_vm_exit_guest_re
 				break;
 
 			case REG_NUM_CR4:
-				/* VMXE bit should be set! for unrestricted guest. */
-				reg_value |= ((u64) CR4_BIT_VMXE);
+				/* VMXE, SMEP, SMAP bit should be set! for unrestricted guest. */
+				reg_value |= CR4_BIT_VMXE | CR4_BIT_SMEP | CR4_BIT_SMAP;
+				reg_value &= ~CR4_BIT_MCE;
 				sb_write_vmcs(VM_GUEST_CR4, reg_value);
 				break;
 

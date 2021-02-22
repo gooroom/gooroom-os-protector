@@ -16,7 +16,7 @@
 /*
  * Macros.
  */
-#define SHADOWBOX_VERSION				"2.5.3"
+#define SHADOWBOX_VERSION				"2.5.4"
 
 /* Feature list of Shadow-box. */
 
@@ -558,9 +558,11 @@
 #define CR3_BIT_PCD								((u64)0x01 << 4)
 
 /* CR4 Flags. */
-#define CR4_BIT_MCE							((u64)0x01 << 6)
+#define CR4_BIT_MCE								((u64)0x01 << 6)
 #define CR4_BIT_VMXE							((u64)0x01 << 13)
 #define CR4_BIT_SMXE							((u64)0x01 << 14)
+#define CR4_BIT_SMEP							((u64)0x01 << 20)
+#define CR4_BIT_SMAP							((u64)0x01 << 21)
 
 /* Shadow-box error codes. */
 #define ERROR_SUCCESS							20008
