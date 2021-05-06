@@ -1,3 +1,10 @@
+gooroom-os-protector (2.5.4+4.19.171~2+grm2u1) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [b2d1d1de] Released Version 2.5.4+4.19.171-2+grm2u1 (2021-05-04)
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Thu, 06 May 2021 11:21:18 +0900
+
 gooroom-os-protector (2.5.4+4.19.152~1+grm2u2) stable; urgency=medium
 
   [ Seunghun Han ]
