@@ -2482,15 +2482,12 @@ static void sb_disable_and_change_machine_check_timer(int reinitialize)
 {
 	typedef void (*mce_timer_delete_all) (void);
 	typedef void (*mce_cpu_restart) (void *data);
-	u64 cr4;
 	unsigned long *check_interval;
 	mce_timer_delete_all delete_timer_fp;
 	mce_cpu_restart restart_cpu_fp;
 
 	/* Disable MCE event. */
-	cr4 = sb_get_cr4();
-	cr4 &= ~(CR4_BIT_MCE);
-	sb_set_cr4(cr4);
+	cr4_clear_bits(X86_CR4_MCE);
 	disable_irq(VM_INT_MACHINE_CHECK);
 
 	if (reinitialize != 0)
@@ -3386,8 +3383,8 @@ static void sb_vm_exit_callback_access_cr(int cpu_id, struct sb_vm_exit_guest_re
 				break;
 
 			case REG_NUM_CR4:
-				/* VMXE, SMEP, SMAP bit should be set! for unrestricted guest. */
-				reg_value |= CR4_BIT_VMXE | CR4_BIT_SMEP | CR4_BIT_SMAP;
+				/* VMXE, SMEP bit should be set! for unrestricted guest. */
+				reg_value |= CR4_BIT_VMXE | CR4_BIT_SMEP;
 				reg_value &= ~CR4_BIT_MCE;
 				sb_write_vmcs(VM_GUEST_CR4, reg_value);
 				break;
@@ -4657,8 +4654,8 @@ static void sb_setup_vm_control_register(struct sb_vm_control_register*
 		VM_BIT_EPT_PAGE_WALK_LENGTH_BITMAP | VM_BIT_EPT_MEM_TYPE_WB;
 #endif
 
-	sb_vm_control_register->cr4_guest_host_mask = CR4_BIT_VMXE;
-	sb_vm_control_register->cr4_read_shadow = CR4_BIT_VMXE;
+	sb_vm_control_register->cr4_guest_host_mask = CR4_BIT_VMXE | CR4_BIT_SMEP | CR4_BIT_MCE;
+	sb_vm_control_register->cr4_read_shadow = CR4_BIT_VMXE | CR4_BIT_SMEP;
 
 	sb_dump_vm_control_register(sb_vm_control_register);
 }
