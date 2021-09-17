@@ -133,6 +133,7 @@ u64 g_dump_count[MAX_VM_EXIT_DUMP_COUNT] = {0, };
 static int sb_start(u64 reinitialize);
 static int sb_get_kernel_version_index(void);
 static int sb_is_kaslr_working(void);
+static int sb_is_intel_processor(void);
 static int sb_relocate_symbol(void);
 static void sb_alloc_vmcs_memory(void);
 static void sb_setup_workaround(void);
@@ -234,6 +235,7 @@ static int sb_system_sleep_notify(struct notifier_block* nb, unsigned long val, 
 static struct notifier_block* g_sb_sleep_nb_ptr = NULL;
 #endif
 
+
 /*
  * Start function of Shadow-box module
  */
@@ -255,6 +257,14 @@ static int __init shadow_box_init(void)
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "Kernel version is not supported, [%s]",
 			name->version);
 		sb_error_log(ERROR_KERNEL_VERSION_MISMATCH);
+		return -1;
+	}
+
+	/* Check Intel processor. */
+	if (sb_is_intel_processor() == 0)
+	{
+		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "Intel CPU is not found\n");
+		sb_error_log(ERROR_HW_NOT_SUPPORT);
 		return -1;
 	}
 
@@ -777,6 +787,29 @@ static int sb_is_kaslr_working(void)
 
 	return 0;
 }
+
+/*
+ * Check Intel processor.
+ */
+static int sb_is_intel_processor(void)
+{
+	u32 eax, ebx, ecx, edx;
+	char processor_name[13] = {0, };
+
+	cpuid_count(0, 0, &eax, &ebx, &ecx, &edx);
+	*((u32*)processor_name) = ebx;
+	*((u32*)processor_name + 1) = edx;
+	*((u32*)processor_name + 2) = ecx;
+
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "%s", processor_name);
+	if (strncmp(processor_name, "GenuineIntel", 12) != 0)
+	{
+		return 0;
+	}
+
+	return 1;
+}
+
 
 /*
  * Relocate symbol depending on KASLR
