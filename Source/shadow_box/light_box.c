@@ -44,6 +44,7 @@
 #include <asm/uaccess.h>
 #include <linux/suspend.h>
 #include <asm/tlbflush.h>
+#include <linux/kprobes.h>
 #include "asm.h"
 #include "shadow_box.h"
 #include "shadow_watcher.h"
@@ -74,7 +75,7 @@ void* g_msr_bitmap_addr[MAX_PROCESSOR_COUNT] = {NULL, };
 int g_trap_count[MAX_PROCESSOR_COUNT] = {0, };
 void* g_virt_apic_page_addr[MAX_PROCESSOR_COUNT] = {NULL, };
 int g_vmx_root_mode[MAX_PROCESSOR_COUNT] = {0, };
-u64 g_stack_size = MAX_STACK_SIZE;
+u64 g_stack_size = MAX_VM_STACK_SIZE;
 u64 g_vm_host_phy_pml4 = 0;
 u64 g_vm_init_phy_pml4 = 0;
 struct module* g_shadow_box_module = NULL;
@@ -184,6 +185,11 @@ static void sb_restore_context_from_vm_guest(int cpu_id, struct sb_vm_full_conte
 	full_context, u64 guest_rsp);
 #endif /* SHADOWBOX_USE_SHUTDOWN */
 static void sb_lock_range(u64 start_addr, u64 end_addr, int alloc_type);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
+static int kprobe_handler_pre_addr(struct kprobe *p, struct pt_regs *regs);
+static int kprobe_handler_pre_trigger(struct kprobe *p, struct pt_regs *regs);
+static int sb_get_kallsyms_lookup_name_ptr(void);
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0) */
 static void sb_get_function_pointers(void);
 static int sb_is_system_shutdowning(void);
 #if SHADOWBOX_USE_SLEEP
@@ -235,6 +241,16 @@ static int sb_system_sleep_notify(struct notifier_block* nb, unsigned long val, 
 static struct notifier_block* g_sb_sleep_nb_ptr = NULL;
 #endif
 
+typedef unsigned long (*kallsyms_lookup_name_t) (const char* name);
+kallsyms_lookup_name_t g_kallsyms_lookup_name_fp = NULL;
+
+typedef void (*watchdog_nmi_disable_t) (unsigned int cpu);
+watchdog_nmi_disable_t g_watchdog_nmi_disable_fp = NULL;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
+typedef void (*flush_tlb_one_kernel_t) (unsigned long addr);
+flush_tlb_one_kernel_t g_flush_tlb_one_kernel_fp = NULL;
+#endif
 
 /*
  * Start function of Shadow-box module
@@ -247,8 +263,21 @@ static int __init shadow_box_init(void)
 	struct kfifo* fifo;
 	u32 eax, ebx, ecx, edx;
 	u64 msr;
+	int ret;
 
 	sb_print_shadow_box_logo();
+
+        /* Since kernel version 5.7.0, kallsyms_lookup_name() is not exported. */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
+	ret = sb_get_kallsyms_lookup_name_ptr();
+	if (ret != 0)
+	{
+		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "Failed to get kallsyms_lookup_name()\n");
+		return ret;
+	}
+#else /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0) */
+	g_kallsyms_lookup_name_fp = kallsyms_lookup_name;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0) */
 
 	/* Check kernel version and kernel ASLR. */
 	if (sb_get_kernel_version_index() == -1)
@@ -302,7 +331,11 @@ static int __init shadow_box_init(void)
 	}
 
 	/* Check BIOS locked feature. */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 6, 0)
 	msr = sb_rdmsr(MSR_IA32_FEATURE_CONTROL);
+#else /* LINUX_VERSION_CODE */
+	msr = sb_rdmsr(MSR_IA32_FEAT_CTL);
+#endif /* LINUX_VERSION_CODE */
 	if (msr & MSR_IA32_FEATURE_CONTROL_BIT_CONTROL_LOCKED)
 	{
 		if (!(msr & MSR_IA32_FEATURE_CONTROL_BIT_VMXON_ENABLED_OUTPUTSIDE_SMX))
@@ -364,9 +397,15 @@ static int __init shadow_box_init(void)
 	 * Shadow-box sets 1GB more than original size to the variable.
 	 */
 	g_max_ram_size = sb_get_max_ram_size();
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "totalram_pages %ld, size %ld, "
 		"g_max_ram_size %ld\n", totalram_pages, totalram_pages * VAL_4KB,
 		g_max_ram_size);
+#else /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0) */
+	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "totalram_pages %ld, size %ld, "
+		"g_max_ram_size %ld\n", totalram_pages(), totalram_pages() * VAL_4KB,
+		g_max_ram_size);
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0) */
 
 	/* Ceiling to 1GBs and adding a buffer. */
 	if (g_max_ram_size < VAL_4GB)
@@ -385,10 +424,11 @@ static int __init shadow_box_init(void)
 	sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "CPU Count %d\n", cpu_count);
 	sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "Booting CPU ID %d\n", cpu_id);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
 #if SHADOWBOX_USE_TBOOT
-	if (tboot != NULL)
+	if (tboot_enabled())
 	{
-		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "Checking tboot\n", tboot->log_addr);
+		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "Checking tboot\n");
 		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] log_addr = %016lX\n",
 			tboot->log_addr);
 		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "    [*] shutdown_entry = %016lX\n",
@@ -399,6 +439,7 @@ static int __init shadow_box_init(void)
 			tboot->num_in_wfs);
 	}
 #endif /* SHADOWBOX_USE_TBOOT */
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0) */
 
 	sb_get_function_pointers();
 	sb_alloc_vmcs_memory();
@@ -776,7 +817,7 @@ static int sb_is_kaslr_working(void)
 	u64 real_text_addr;
 
 	stored_text_addr = sb_get_symbol_address("_etext");
-	real_text_addr = kallsyms_lookup_name("_etext");
+	real_text_addr = g_kallsyms_lookup_name_fp("_etext");
 
 	if (stored_text_addr != real_text_addr)
 	{
@@ -823,7 +864,7 @@ static int sb_relocate_symbol(void)
 	int i;
 
 	stored_text_addr = sb_get_symbol_address("_etext");
-	real_text_addr = kallsyms_lookup_name("_etext");
+	real_text_addr = g_kallsyms_lookup_name_fp("_etext");
 
 	delta = real_text_addr - stored_text_addr;
 	if (delta == 0)
@@ -863,7 +904,7 @@ u64 sb_get_symbol_address(char* symbol)
 	int match_index;
 #endif /* SHADOWBOX_USE_PRE_SYMBOL */
 
-	log_addr = kallsyms_lookup_name(symbol);
+	log_addr = g_kallsyms_lookup_name_fp(symbol);
 #if SHADOWBOX_USE_PRE_SYMBOL
 	if (log_addr == 0)
 	{
@@ -1680,16 +1721,20 @@ static void sb_setup_host_idt_and_protect(void)
 		idt->offset_low = (u16)(handler);
 		idt->segment = __KERNEL_CS;
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 2, 0)
+		idt->bits.ist = IST_INDEX_DB;
+#else /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 2, 0) */
 		idt->bits.ist = DEBUG_STACK;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 2, 0) */
 		idt->bits.type = GATE_INTERRUPT;
 		idt->bits.dpl = 0;
 		idt->bits.p = 1;
-#else
+#else /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0) */
 		idt->ist = DEBUG_STACK;
 		idt->type = GATE_INTERRUPT;
 		idt->dpl = 0;
 		idt->p = 1;
-#endif
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0) */
 		idt->offset_middle = (u16)(handler >> 16);
 		idt->offset_high = (u32)(handler >> 32);
 
@@ -2266,7 +2311,9 @@ u64 sb_sync_page_table(u64 addr)
 EXIT:
 
 	/* Update page table to CPU. */
-#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 14, 20)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
+	g_flush_tlb_one_kernel_fp(addr);
+#elif LINUX_VERSION_CODE > KERNEL_VERSION(4, 14, 20)
 	__flush_tlb_one_kernel(addr);
 #else
 	__flush_tlb_one(addr);
@@ -2480,11 +2527,13 @@ void sb_hang(char* string)
  */
 static void sb_disable_and_change_machine_check_timer(int reinitialize)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
 	typedef void (*mce_timer_delete_all) (void);
 	typedef void (*mce_cpu_restart) (void *data);
-	unsigned long *check_interval;
 	mce_timer_delete_all delete_timer_fp;
 	mce_cpu_restart restart_cpu_fp;
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0) */
+	unsigned long *check_interval;
 
 	/* Disable MCE event. */
 	cr4_clear_bits(X86_CR4_MCE);
@@ -2499,14 +2548,17 @@ static void sb_disable_and_change_machine_check_timer(int reinitialize)
 	if (smp_processor_id() == 0)
 	{
 		check_interval = (unsigned long *)sb_get_symbol_address("check_interval");
-		delete_timer_fp = (mce_timer_delete_all)sb_get_symbol_address("mce_timer_delete_all");
-		restart_cpu_fp = (mce_cpu_restart)sb_get_symbol_address("mce_cpu_restart");
-
 		/* Set seconds for timer interval and restart timer. */
 		*check_interval = VM_MCE_TIMER_VALUE;
 
+		/* mce_timer_delete_all has gone at 5.8.0, so just change the interval and wait. */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0)
+		delete_timer_fp = (mce_timer_delete_all)sb_get_symbol_address("mce_timer_delete_all");
+		restart_cpu_fp = (mce_cpu_restart)sb_get_symbol_address("mce_cpu_restart");
+
 		delete_timer_fp();
 		on_each_cpu(restart_cpu_fp, NULL, 1);
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0) */
 	}
 }
 
@@ -2790,7 +2842,11 @@ static int sb_init_vmx(int cpu_id)
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] IA32_VMX_EXIT_CTRLS MSR Value "
 		"%016lX\n", value);
 
-	msr = sb_rdmsr(MSR_IA32_FEATURE_CONTROL);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 6, 0)
+        msr = sb_rdmsr(MSR_IA32_FEATURE_CONTROL);
+#else /* LINUX_VERSION_CODE */
+        msr = sb_rdmsr(MSR_IA32_FEAT_CTL);
+#endif /* LINUX_VERSION_CODE */
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] IA32_FEATURE_CONTROL MSR Value "
 		"%016lX\n", msr);
 
@@ -4330,7 +4386,11 @@ static void sb_setup_vm_guest_register(struct sb_vm_guest_register*
 
 #if SHADOWBOX_USE_HW_BREAKPOINT
 	set_debugreg(sb_get_symbol_address("wake_up_new_task"), 0);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
 	set_debugreg(sb_get_symbol_address("proc_flush_task"), 1);
+#else /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0) */
+	set_debugreg(sb_get_symbol_address("cgroup_release"), 1);
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0) */
 	set_debugreg(sb_get_symbol_address("module_bug_finalize"), 2);
 	set_debugreg(sb_get_symbol_address("module_bug_cleanup"), 3);
 
@@ -4569,6 +4629,15 @@ static void sb_setup_vm_control_register(struct sb_vm_control_register*
 				cpu_id);
 			sec_flags |= VM_BIT_VM_SEC_PROC_CTRL_ENABLE_XSAVE;
 		}
+	}
+
+	/* Kernel 5.8.0 uses RDTSCP instead of RDTSC. */
+	if ((sb_rdmsr(MSR_IA32_VMX_PROCBASED_CTLS2) >> 32) &
+	VM_BIT_VM_SEC_PROC_CTRL_ENABLE_RDTSCP)
+	{
+		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "VM [%d] Support Enable RDTSCP\n",
+			cpu_id);
+		sec_flags |= VM_BIT_VM_SEC_PROC_CTRL_ENABLE_RDTSCP;
 	}
 
 #if SHADOWBOX_USE_VPID
@@ -5320,6 +5389,54 @@ int sb_is_addr_in_kernel_ro_area(void* addr)
 	return 0;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0)
+static struct kprobe g_kp_for_addr, g_kp_for_trigger;
+
+static int kprobe_handler_pre_addr(struct kprobe *p, struct pt_regs *regs)
+{
+	g_kallsyms_lookup_name_fp = (kallsyms_lookup_name_t) (regs->ip - 1);
+	return 0;
+}
+
+static int kprobe_handler_pre_trigger(struct kprobe *p, struct pt_regs *regs)
+{
+	/* Do nothing. */
+	return 0;
+}
+
+/*
+ * Get kallsyms_lookup_name pointer.
+ */
+static int sb_get_kallsyms_lookup_name_ptr(void)
+{
+	int ret;
+
+	g_kp_for_addr.symbol_name = "kallsyms_lookup_name";
+	g_kp_for_addr.pre_handler = kprobe_handler_pre_addr;
+
+	ret = register_kprobe(&g_kp_for_addr);
+	if (ret < 0)
+	{
+		return ret;
+	}
+
+	g_kp_for_trigger.symbol_name = "kallsyms_lookup_name";
+	g_kp_for_trigger.pre_handler = kprobe_handler_pre_trigger;
+
+	ret = register_kprobe(&g_kp_for_trigger);
+	if (ret < 0)
+	{
+		unregister_kprobe(&g_kp_for_addr);
+		return ret;
+	}
+
+	unregister_kprobe(&g_kp_for_addr);
+	unregister_kprobe(&g_kp_for_trigger);
+
+	return ret;
+}
+
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0) */
 
 /*
  * Get function pointers for periodic check.
@@ -5327,6 +5444,12 @@ int sb_is_addr_in_kernel_ro_area(void* addr)
 static void sb_get_function_pointers(void)
 {
 	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "Get function pointers\n");
+
+	g_watchdog_nmi_disable_fp = (watchdog_nmi_disable_t) sb_get_symbol_address("watchdog_nmi_disable");
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
+	g_flush_tlb_one_kernel_fp  = (flush_tlb_one_kernel_t) sb_get_symbol_address("flush_tlb_one_kernel");
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0) */
 
 	g_modules_ptr = (struct list_head*)sb_get_symbol_address("modules");
 

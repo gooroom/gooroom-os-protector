@@ -61,7 +61,10 @@ static struct module* g_helper_module = NULL;
 
 #if SHADOWBOX_USE_TERMINATE_MALICIOUS_PROCESS
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
+typedef int (*sb_do_send_sig_info)(int sig, struct kernel_siginfo *info,
+	struct task_struct *p, enum pid_type type);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
 typedef int (*sb_do_send_sig_info)(int sig, struct siginfo *info,
 	struct task_struct *p, enum pid_type type);
 #else /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0) */
@@ -1239,7 +1242,10 @@ static int sb_check_sw_file_op_fields(int cpu_id, const struct file_operations* 
 	error |= !sb_is_addr_in_ro_area(op->setlease);
 	error |= !sb_is_addr_in_ro_area(op->fallocate);
 	error |= !sb_is_addr_in_ro_area(op->show_fdinfo);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
+	error |= !sb_is_addr_in_ro_area(op->copy_file_range);
+	error |= !sb_is_addr_in_ro_area(op->remap_file_range);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
 	error |= !sb_is_addr_in_ro_area(op->copy_file_range);
 	error |= !sb_is_addr_in_ro_area(op->clone_file_range);
 	error |= !sb_is_addr_in_ro_area(op->dedupe_file_range);
@@ -1370,8 +1376,10 @@ static int sb_check_sw_proto_op_fields(int cpu_id, const struct proto_ops* op,
 	error |= !sb_is_addr_in_ro_area(op->shutdown);
 	error |= !sb_is_addr_in_ro_area(op->setsockopt);
 	error |= !sb_is_addr_in_ro_area(op->getsockopt);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
 	error |= !sb_is_addr_in_ro_area(op->compat_setsockopt);
 	error |= !sb_is_addr_in_ro_area(op->compat_getsockopt);
+#endif /* LINUX_VERSION_CODE */
 	error |= !sb_is_addr_in_ro_area(op->sendmsg);
 	error |= !sb_is_addr_in_ro_area(op->recvmsg);
 	error |= !sb_is_addr_in_ro_area(op->mmap);

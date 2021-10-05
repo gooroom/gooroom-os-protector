@@ -22,6 +22,7 @@
 #include <linux/smp.h>
 #include <linux/version.h>
 #include <asm/tlbflush.h>
+#include <asm/io.h>
 #include "shadow_box.h"
 #include "mmu.h"
 #include "iommu.h"
@@ -57,7 +58,7 @@ static void sb_parse_iommu_pte(u64 pte_addr)
 	int i;
 	bool ioremap = true;
 
-	remap_addr = (u8*)ioremap_nocache(pte_addr & MASK_PAGEADDR, VTD_PAGE_SIZE);
+	remap_addr = (u8*)ioremap_uc(pte_addr & MASK_PAGEADDR, VTD_PAGE_SIZE);
 	if (remap_addr == NULL)
 	{
 		ioremap = false;
@@ -92,7 +93,7 @@ static void sb_parse_iommu_pde(u64 pte_addr)
 	int i;
 	bool ioremap = true;
 
-	remap_addr = (u8*)ioremap_nocache(pte_addr & MASK_PAGEADDR, VTD_PAGE_SIZE);
+	remap_addr = (u8*)ioremap_uc(pte_addr & MASK_PAGEADDR, VTD_PAGE_SIZE);
 	if (remap_addr == NULL)
 	{
 		ioremap = false;
@@ -135,7 +136,7 @@ static void sb_parse_iommu_pdpepd(u64 pte_addr)
 	int i;
 	bool ioremap = true;
 
-	remap_addr = (u8*)ioremap_nocache(pte_addr & MASK_PAGEADDR, VTD_PAGE_SIZE);
+	remap_addr = (u8*)ioremap_uc(pte_addr & MASK_PAGEADDR, VTD_PAGE_SIZE);
 	if (remap_addr == NULL)
 	{
 		ioremap = false;
@@ -175,7 +176,7 @@ static void sb_parse_iommu_pml4(u64 pte_addr)
 	int i;
 	bool ioremap = true;
 
-	remap_addr = (u8*)ioremap_nocache(pte_addr & MASK_PAGEADDR, VTD_PAGE_SIZE);
+	remap_addr = (u8*)ioremap_uc(pte_addr & MASK_PAGEADDR, VTD_PAGE_SIZE);
 	if (remap_addr == NULL)
 	{
 		ioremap = false;
@@ -210,7 +211,7 @@ static void sb_parse_iommu_pml4(u64 pte_addr)
  */
 static void sb_parse_iommu_context_entry(u64 context_addr)
 {
-	struct context_entry* context;
+	struct sb_context_entry* context;
 	int i;
 	u8* remap_addr;
 
@@ -224,8 +225,8 @@ static void sb_parse_iommu_context_entry(u64 context_addr)
 
 	for (i = 0 ; i < 256 ; i++)
 	{
-		context = (struct context_entry*) (remap_addr + i * sizeof(
-				struct context_entry));
+		context = (struct sb_context_entry*) (remap_addr + i * sizeof(
+				struct sb_context_entry));
 		if (context == NULL)
 		{
 			sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "        [*] %d Entry is null\n",
@@ -254,7 +255,7 @@ static void sb_parse_iommu_context_entry(u64 context_addr)
  */
 static void sb_parse_iommu_root_entry(u64 root_table_addr)
 {
-	struct root_entry* root;
+	struct sb_root_entry* root;
 	u8* remap_addr;
 	int i;
 
@@ -270,7 +271,7 @@ static void sb_parse_iommu_root_entry(u64 root_table_addr)
 	/* Root Entry. */
 	for (i = 0 ; i < 256 ; i++)
 	{
-		root = (struct root_entry*)(remap_addr + i * sizeof(struct root_entry));
+		root = (struct sb_root_entry*)(remap_addr + i * sizeof(struct sb_root_entry));
 		if (root == NULL)
 		{
 			sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "    [*] %d Entry is null\n",
@@ -650,8 +651,8 @@ static void sb_free_iommu_pages_internal(u64 *array, int count)
  */
 int sb_alloc_iommu_pages(void)
 {
-	struct root_entry* root_entry_table;
-	struct context_entry* context_entry_table;
+	struct sb_root_entry* root_entry_table;
+	struct sb_context_entry* context_entry_table;
 
 	g_iommu_info.pml4_ent_count = CEIL(g_max_ram_size, VAL_512GB);
 	g_iommu_info.pdpte_pd_ent_count = CEIL(g_max_ram_size, VAL_1GB);
@@ -732,8 +733,8 @@ int sb_alloc_iommu_pages(void)
 	sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Page Table Memory Alloc Success\n");
 
 	/* Allocate memory for root table and context table. */
-	root_entry_table = (struct root_entry*)__get_free_page(GFP_KERNEL);
-	context_entry_table = (struct context_entry*)__get_free_page(GFP_KERNEL);
+	root_entry_table = (struct sb_root_entry*)__get_free_page(GFP_KERNEL);
+	context_entry_table = (struct sb_context_entry*)__get_free_page(GFP_KERNEL);
 	if ((root_entry_table == NULL) || (context_entry_table == NULL))
 	{
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO " sb_alloc_iommu_pages alloc fail\n");
@@ -815,12 +816,12 @@ void sb_free_iommu_pages(void)
  */
 static void sb_setup_root_table_entry(void)
 {
-	struct root_entry* root_entry_table;
-	struct context_entry* context_entry_table;
+	struct sb_root_entry* root_entry_table;
+	struct sb_context_entry* context_entry_table;
 	int i;
 
-	root_entry_table = (struct root_entry*)g_iommu_info.root_entry_table_addr;
-	context_entry_table = (struct context_entry*)g_iommu_info.context_entry_table_addr;
+	root_entry_table = (struct sb_root_entry*)g_iommu_info.root_entry_table_addr;
+	context_entry_table = (struct sb_context_entry*)g_iommu_info.context_entry_table_addr;
 	for (i = 0 ; i < 256 ; i++)
 	{
 		root_entry_table[i].rsvd1 = 0;
@@ -838,11 +839,11 @@ static void sb_setup_root_table_entry(void)
  */
 static void sb_setup_context_table_entry(void)
 {
-	struct context_entry* context_entry_table;
+	struct sb_context_entry* context_entry_table;
 	u64 table_array;
 	int i;
 
-	context_entry_table = (struct context_entry*)g_iommu_info.context_entry_table_addr;
+	context_entry_table = (struct sb_context_entry*)g_iommu_info.context_entry_table_addr;
 	if (g_entry_level == ENTRY_3LEVEL_PTE)
 	{
 		table_array = g_iommu_info.pdpte_pd_page_addr_array[0];
@@ -1145,7 +1146,7 @@ void sb_lock_iommu(void)
 			sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] Address: %016lX\n",
 				(u64)drhd->address);
 
-			remap_addr = (u8*)ioremap_nocache((resource_size_t)(drhd->address),
+			remap_addr = (u8*)ioremap_uc((resource_size_t)(drhd->address),
 				VTD_PAGE_SIZE);
 			root_table_addr = dmar_readq(remap_addr + DMAR_CAP_REG);
 			sb_printf(LOG_LEVEL_DETAIL, LOG_INFO "    [*] CAP Register: %016lX\n",
@@ -1238,7 +1239,7 @@ void sb_unlock_iommu(void)
 		if (dmar_header->type == ACPI_DMAR_TYPE_HARDWARE_UNIT)
 		{
 			hardware_unit = (struct acpi_dmar_hardware_unit*)dmar_header;
-			remap_addr = (u8*)ioremap_nocache((resource_size_t)(hardware_unit->address),
+			remap_addr = (u8*)ioremap_uc((resource_size_t)(hardware_unit->address),
 				VTD_PAGE_SIZE);
 
 			sb_disable_iommu(remap_addr);
