@@ -50,8 +50,6 @@
 #define SHADOWBOX_USE_IOMMU						0
 /* If you want to check module list periodically, turn on this feature. */
 #define SHADOWBOX_USE_PERIODIC_MODULE_CHECK		0
-/* If you want to use code patch workaround, turn on this feature. */
-#define SHADOWBOX_USE_WORKAROUND				0
 #define SHADOWBOX_USE_VPID						0
 
 
