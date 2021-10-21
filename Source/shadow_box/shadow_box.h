@@ -16,7 +16,7 @@
 /*
  * Macros.
  */
-#define SHADOWBOX_VERSION				"3.0.0"
+#define SHADOWBOX_VERSION				"3.1.0"
 
 /* Feature list of Shadow-box. */
 
