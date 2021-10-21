@@ -2583,6 +2583,9 @@ static int sb_vm_thread(void* argument)
 	/* Disable MCE exception. */
 	sb_disable_and_change_machine_check_timer(reinitialize);
 
+	/* Disable Watchdog. */
+	g_watchdog_nmi_disable_fp(cpu_id);
+
 	/* Synchronize processors. */
 	atomic_dec(&g_thread_entry_count);
 	while(atomic_read(&g_thread_entry_count) > 0)
