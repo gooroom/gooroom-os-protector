@@ -133,7 +133,6 @@ u64 g_dump_count[MAX_VM_EXIT_DUMP_COUNT] = {0, };
 static int sb_start(u64 reinitialize);
 static int sb_is_intel_processor(void);
 static void sb_alloc_vmcs_memory(void);
-static void sb_setup_workaround(void);
 static int sb_setup_memory_pool(void);
 void * sb_get_memory(void);
 static int sb_is_workaround_addr(u64 addr);
@@ -458,8 +457,6 @@ static int __init shadow_box_init(void)
 		sb_error_log(ERROR_MEMORY_ALLOC_FAIL);
 		return -1;
 	}
-
-	sb_setup_workaround();
 
 	if (sb_setup_memory_pool() != 0)
 	{
@@ -894,53 +891,6 @@ static void sb_alloc_vmcs_memory(void)
 				"Addr %016lX\n", i, g_virt_apic_page_addr[i]);
 		}
 	}
-}
-
-/*
- * Setup data for kernel patch workaround.
- * If you use CONIG_JUMP_LABEL,kernel patches itself during runtime.
- * This function adds exceptional case to allow runtime patch.
- */
-static void sb_setup_workaround(void)
-{
-#if SHADOWBOX_USE_WORKAROUND
-	char* function_list[WORK_AROUND_MAX_COUNT] = {
-		"__netif_hash_nolisten", "__ip_select_ident",
-		"secure_dccpv6_sequence_number", "secure_ipv4_port_ephemeral",
-		"netif_receive_skb_internal", "__netif_receive_skb_core",
-		"netif_rx_internal", "inet6_ehashfn.isra.6", "inet_ehashfn", };
-	u64 log_addr;
-	u64 phy_addr;
-	int i;
-	int index = 0;
-
-	memset(&g_workaround, 0, sizeof(g_workaround));
-	sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "Setup Workaround Address\n");
-
-	for (i = 0 ; i < WORK_AROUND_MAX_COUNT ; i++)
-	{
-		if (function_list[i] == 0)
-		{
-			break;
-		}
-
-		log_addr = sb_get_symbol_address(function_list[i]);
-		if (log_addr <= 0)
-		{
-			sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "    [*] %s log %016lX is not"
-				" found\n", function_list[i], log_addr);
-			continue;
-		}
-		phy_addr = virt_to_phys((void*)(log_addr & MASK_PAGEADDR));
-
-		sb_printf(LOG_LEVEL_NORMAL, LOG_INFO "    [*] %s log %016lX %016lX\n",
-			function_list[i], log_addr, phy_addr);
-		g_workaround.addr_array[index] = phy_addr;
-		g_workaround.count_array[index] = 0;
-
-		index++;
-	}
-#endif /* SHADOWBOX_USE_WORKAROUND */
 }
 
 /*
