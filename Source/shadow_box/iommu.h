@@ -75,14 +75,14 @@ struct sb_iommu_info
 };
 
 /* Root table entry structure. */
-struct root_entry
+struct sb_root_entry
 {
 	u64	val;
 	u64	rsvd1;
 };
 
 /* Context table entry structure. */
-struct context_entry
+struct sb_context_entry
 {
 	u64	lo;
 	u64	hi;

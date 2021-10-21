@@ -30,7 +30,7 @@
 #define SHADOWBOX_USE_I915_WORKAROUND	1
 #define SHADOWBOX_USE_SLEEP				1
 /* If you want to use tboot, turn on this feature. */
-#define SHADOWBOX_USE_TBOOT				1
+#define SHADOWBOX_USE_TBOOT				0
 
 /* These features are options. */
 #define SHADOWBOX_USE_EXTRA_MODULE_PROTECTION		0
@@ -112,7 +112,7 @@
 
 #define MAX_PROCESSOR_COUNT 				256
 #define MAX_RO_ARRAY_COUNT 					4096
-#define MAX_STACK_SIZE						0x800000
+#define MAX_VM_STACK_SIZE					0x800000
 
 #define WORK_AROUND_MAX_COUNT				30
 #define SYMBOL_MAX_COUNT					26
@@ -359,6 +359,7 @@
 /* Secondary processor-based VM execution control flags. */
 #define VM_BIT_VM_SEC_PROC_CTRL_USE_EPT			(0x01 << 1)
 #define VM_BIT_VM_SEC_PROC_CTRL_DESC_TABLE		(0x01 << 2)
+#define VM_BIT_VM_SEC_PROC_CTRL_ENABLE_RDTSCP	(0x01 << 3)
 #define VM_BIT_VM_SEC_PROC_CTRL_ENABLE_VPID		(0x01 << 5)
 #define VM_BIT_VM_SEC_PROC_CTRL_UNREST_GUEST	(0x01 << 7)
 #define VM_BIT_VM_SEC_PROC_CTRL_ENABLE_INVPCID  (0x01 << 12)
