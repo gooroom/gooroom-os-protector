@@ -220,24 +220,24 @@ int main(void)
 	error = safe_system(argv_helper[0], argv_helper, &status);
 	if (error != 0)
 	{
-		fprintf(stderr, "Shadow-box-helper module insmod fail\n", strerror(errno));
+		fprintf(stderr, "Shadow-box-helper module insmod fail, err=%s\n", strerror(errno));
 		return -1;
 	}
 	else if (WEXITSTATUS(status) != 0)
 	{
-		fprintf(stderr, "Shadow-box-helper module load fail\n", strerror(errno));
+		fprintf(stderr, "Shadow-box-helper module load fail, err=%s\n", strerror(errno));
 		return -1;
 	}
 
 	error = safe_system(argv_shadowbox[0], argv_shadowbox, &status);
 	if (error != 0)
 	{
-		fprintf(stderr, "Shadow-box module insmod fail\n", strerror(errno));
+		fprintf(stderr, "Shadow-box module insmod fail, err=%s\n", strerror(errno));
 		return -1;
 	}
 	else if (WEXITSTATUS(error) != 0)
 	{
-		fprintf(stderr, "Shadow-box module load fail\n", strerror(errno));
+		fprintf(stderr, "Shadow-box module load fail, err=%s\n", strerror(errno));
 		return -1;
 	}
 
@@ -245,14 +245,14 @@ int main(void)
 	fd = open("/dev/sb-helper", O_RDONLY);
 	if (fd < 0)
 	{
-		fprintf(stderr, "Shadow-box-helper module start fail\n", strerror(errno));
+		fprintf(stderr, "Shadow-box-helper module start fail, err=%s\n", strerror(errno));
 		safe_system(argv_rmmod[0], argv_rmmod, &status);
 		return -1;
 	}
 
 	if (ioctl(fd, IOCTL_START_LOGGING, &argument) != 0)
 	{
-		fprintf(stderr, "Shadow-box-helper module start fail\n", strerror(errno));
+		fprintf(stderr, "Shadow-box-helper module start fail, err=%s\n", strerror(errno));
 		safe_system(argv_rmmod[0], argv_rmmod, &status);
 		return -1;
 	}
