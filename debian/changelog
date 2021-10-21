@@ -1,3 +1,36 @@
+gooroom-os-protector (2.5.5+4.19.194~3+grm2u1) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [c6da21a6] Released Version 2.5.5+4.19.194~3+grm2u1 (2021-10-02)
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Sat, 02 Oct 2021 17:33:48 +0900
+
+gooroom-os-protector (2.5.5+4.19.171~2+grm2u1) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [739b6703] Add a detecting Intel CPU feature
+  * [ec7474cf] Change CR4 monitoring algorithm
+  * [8c620e7b] Add hardening flags
+  * [9563fad8] Change version to 2.5.5
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Sat, 02 Oct 2021 15:38:29 +0900
+
+gooroom-os-protector (2.5.4+4.19.171~2+grm2u1) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [b2d1d1de] Released Version 2.5.4+4.19.171-2+grm2u1 (2021-05-04)
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Thu, 06 May 2021 11:21:18 +0900
+
+gooroom-os-protector (2.5.4+4.19.152~1+grm2u2) stable; urgency=medium
+
+  [ Seunghun Han ]
+  * [faf4ec8f] Add Celeron N4000 support feature and change to v2.5.4
+
+  [ Gooroom Autobuilder ]
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Mon, 22 Feb 2021 12:12:35 +0900
+
 gooroom-os-protector (2.5.3+4.19.152~1+grm2u2) stable; urgency=medium
 
   [ jongkyung.woo ]

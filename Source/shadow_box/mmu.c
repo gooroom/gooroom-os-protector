@@ -17,6 +17,7 @@
 #include <linux/slab.h>
 #include <linux/mm.h>
 #include <linux/version.h>
+#include <asm/io.h>
 #include "mmu.h"
 #include "shadow_box.h"
 
@@ -561,6 +562,13 @@ static int sb_callback_walk_ram(unsigned long start, unsigned long size, void* a
 u64 sb_get_max_ram_size(void)
 {
 	my_walk_system_ram_range func = NULL;
+	u64 total_pages;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 0, 0)
+	total_pages = totalram_pages;
+#else /* LINUX_VERSION_CODE */
+	total_pages = totalram_pages();
+#endif /* LINUX_VERSION_CODE */
 
 	g_ram_end = 0;
 
@@ -568,10 +576,10 @@ u64 sb_get_max_ram_size(void)
 	if (func == NULL)
 	{
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "walk_system_ram_range fail\n");
-		return totalram_pages * 2 * VAL_4KB;
+		return total_pages * 2 * VAL_4KB;
 	}
 
-	func(0, totalram_pages * 2, NULL, sb_callback_walk_ram);
+	func(0, total_pages * 2, NULL, sb_callback_walk_ram);
 
 	return g_ram_end;
 }
