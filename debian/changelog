@@ -1,3 +1,20 @@
+gooroom-os-protector (3.1.0+5.10.46~4+bpo10+1+grm2u1) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [6c67a638] Released Version 2.5.3+5.9.6-1~bpo10+1+grm2u1 (2020-12-24)
+  * [574a287c] Released Version 2.5.3+5.10.46-4~bpo10+1+grm2u1 (2021-08-18)
+
+  [ Seunghun Han ]
+  * [bed75727] Support Linux kernel 5.10.0
+  * [0be37b12] Change version to 3.0.0.
+  * [3a3a6905] Disable the NMI watchdog feature
+  * [736285e3] Remove dependencies on System.map files
+  * [5edc4281] Remove a workaround test feature
+  * [c4d8c513] Remove compile warnings
+  * [be5d64c3] Change version to 3.1.0
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Thu, 21 Oct 2021 18:29:02 +0900
+
 gooroom-os-protector (2.5.5+4.19.194~3+grm2u1) stable; urgency=medium
 
   [ jongkyung.woo ]
