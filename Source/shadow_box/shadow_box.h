@@ -26,7 +26,6 @@
 #define SHADOWBOX_USE_HW_BREAKPOINT		1
 #define SHADOWBOX_USE_DESC_TABLE		1
 #define SHADOWBOX_USE_PRE_TIMER			1
-#define SHADOWBOX_USE_PRE_SYMBOL		1
 #define SHADOWBOX_USE_I915_WORKAROUND	1
 #define SHADOWBOX_USE_SLEEP				1
 /* If you want to use tboot, turn on this feature. */

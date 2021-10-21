@@ -15,7 +15,6 @@ ccflags-y := -fno-toplevel-reorder
 
 all: 
 	echo $(PWD)
-	python make_symtable.py
 	make -C /lib/modules/$(KVERSION)/build M=$(PWD) modules 
 
 clean:

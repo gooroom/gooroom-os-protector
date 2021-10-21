@@ -52,7 +52,6 @@
 #include "iommu.h"
 #include "asm.h"
 #include "workaround.h"
-#include "symbol.h"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 #include <linux/vmalloc.h>
@@ -132,10 +131,7 @@ u64 g_dump_count[MAX_VM_EXIT_DUMP_COUNT] = {0, };
  * Static functions.
  */
 static int sb_start(u64 reinitialize);
-static int sb_get_kernel_version_index(void);
-static int sb_is_kaslr_working(void);
 static int sb_is_intel_processor(void);
-static int sb_relocate_symbol(void);
 static void sb_alloc_vmcs_memory(void);
 static void sb_setup_workaround(void);
 static int sb_setup_memory_pool(void);
@@ -259,7 +255,6 @@ static int __init shadow_box_init(void)
 {
 	int cpu_count;
 	int cpu_id;
-	struct new_utsname* name;
 	struct kfifo* fifo;
 	u32 eax, ebx, ecx, edx;
 	u64 msr;
@@ -279,29 +274,12 @@ static int __init shadow_box_init(void)
 	g_kallsyms_lookup_name_fp = kallsyms_lookup_name;
 #endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 7, 0) */
 
-	/* Check kernel version and kernel ASLR. */
-	if (sb_get_kernel_version_index() == -1)
-	{
-		name = utsname();
-		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "Kernel version is not supported, [%s]",
-			name->version);
-		sb_error_log(ERROR_KERNEL_VERSION_MISMATCH);
-		return -1;
-	}
-
 	/* Check Intel processor. */
 	if (sb_is_intel_processor() == 0)
 	{
 		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "Intel CPU is not found\n");
 		sb_error_log(ERROR_HW_NOT_SUPPORT);
 		return -1;
-	}
-
-	/* Check kASLR. */
-	if (sb_is_kaslr_working() == 1)
-	{
-		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "Kernel ASLR is enabled\n");
-		sb_relocate_symbol();
 	}
 
 	/* Check VMX support. */
@@ -785,51 +763,6 @@ void sb_vm_resume_fail_callback(u64 error)
 }
 
 /*
- * Find matched index of current kernel version.
- */
-static int sb_get_kernel_version_index(void)
-{
-	int i;
-	int match_index = -1;
-	struct new_utsname* name;
-
-	name = utsname();
-
-	/* Search kernel version table */
-	for (i = 0 ; i < (sizeof(g_kernel_version) / sizeof(char*)) ; i++)
-	{
-		if (strcmp(name->version, g_kernel_version[i]) == 0)
-		{
-			match_index = i;
-			break;
-		}
-	}
-
-	return match_index;
-}
-
-/*
- * Check kernel ASLR
- */
-static int sb_is_kaslr_working(void)
-{
-	u64 stored_text_addr;
-	u64 real_text_addr;
-
-	stored_text_addr = sb_get_symbol_address("_etext");
-	real_text_addr = g_kallsyms_lookup_name_fp("_etext");
-
-	if (stored_text_addr != real_text_addr)
-	{
-		sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "_etext System.map=%lX Kallsyms=%lX\n",
-			stored_text_addr, real_text_addr);
-		return 1;
-	}
-
-	return 0;
-}
-
-/*
  * Check Intel processor.
  */
 static int sb_is_intel_processor(void)
@@ -851,45 +784,6 @@ static int sb_is_intel_processor(void)
 	return 1;
 }
 
-
-/*
- * Relocate symbol depending on KASLR
- */
-static int sb_relocate_symbol(void)
-{
-	u64 stored_text_addr;
-	u64 real_text_addr;
-	u64 delta;
-	int index;
-	int i;
-
-	stored_text_addr = sb_get_symbol_address("_etext");
-	real_text_addr = g_kallsyms_lookup_name_fp("_etext");
-
-	delta = real_text_addr - stored_text_addr;
-	if (delta == 0)
-	{
-		return 0;
-	}
-
-	sb_printf(LOG_LEVEL_DEBUG, LOG_INFO "Reloace symbol System.map=%lX Kallsyms="
-		"%lX\n", stored_text_addr, real_text_addr);
-
-	index = sb_get_kernel_version_index();
-	if (index == -1)
-	{
-		return -1;
-	}
-
-	for (i = 0 ; i < SYMBOL_MAX_COUNT ; i++)
-	{
-		g_symbol_table_array[index].symbol[i].addr += delta;
-	}
-
-	return 0;
-}
-
-
 /*
  * Get address of kernel symbol.
  * kallsyms_lookup_name() does not have all symbol address which are in System.map.
@@ -899,36 +793,16 @@ static int sb_relocate_symbol(void)
 u64 sb_get_symbol_address(char* symbol)
 {
 	u64 log_addr = 0;
-#if SHADOWBOX_USE_PRE_SYMBOL
-	int i;
-	int match_index;
-#endif /* SHADOWBOX_USE_PRE_SYMBOL */
 
 	log_addr = g_kallsyms_lookup_name_fp(symbol);
-#if SHADOWBOX_USE_PRE_SYMBOL
 	if (log_addr == 0)
 	{
-		match_index = sb_get_kernel_version_index();
-
-		if (match_index == -1)
-		{
-			return 0;
-		}
-
-		for (i = 0 ; i < SYMBOL_MAX_COUNT; i++)
-		{
-			if (strcmp(g_symbol_table_array[match_index].symbol[i].name, symbol) == 0)
-			{
-				log_addr = g_symbol_table_array[match_index].symbol[i].addr;
-				break;
-			}
-		}
+		sb_printf(LOG_LEVEL_ERROR, LOG_INFO "sb_get_symbol_address [%s] is NULL\n", symbol);
+		sb_hang("Error SYMBOL_NULL\n");
 	}
-#endif /* SHADOWBOX_USE_PRE_SYMBOL */
 
 	return log_addr;
 }
-
 
 /*
  * Convert DR7 data from debug register index, length, type.
