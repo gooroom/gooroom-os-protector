@@ -22,6 +22,7 @@
 #include <asm/spinlock.h>
 #include <linux/jiffies.h>
 #include <linux/version.h>
+#include <asm/invpcid.h>
 #include "shadow_box.h"
 #include "shadow_watcher.h"
 #include "mmu.h"
@@ -60,7 +61,10 @@ static struct module* g_helper_module = NULL;
 
 #if SHADOWBOX_USE_TERMINATE_MALICIOUS_PROCESS
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
+typedef int (*sb_do_send_sig_info)(int sig, struct kernel_siginfo *info,
+	struct task_struct *p, enum pid_type type);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
 typedef int (*sb_do_send_sig_info)(int sig, struct siginfo *info,
 	struct task_struct *p, enum pid_type type);
 #else /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0) */
@@ -110,6 +114,7 @@ static void sb_validate_sw_module_list(int count_of_module_list);
 
 static void sb_copy_task_list_to_sw_task_manager(void);
 static void sb_copy_module_list_to_sw_module_manager(void);
+static void sb_flush_tlb_global(void);
 
 /*
  * Prepare Shadow-watcher.
@@ -255,7 +260,7 @@ static void sb_check_sw_task_periodic(int cpu_id)
 	if (write_trylock(g_tasklist_lock))
 	{
 		/* Flush previous TLB mappaing. */
-		__flush_tlb_global();
+		sb_flush_tlb_global();
 
 		sb_check_sw_task_list(cpu_id);
 		write_unlock(g_tasklist_lock);
@@ -283,7 +288,7 @@ static void sb_check_sw_module_periodic(int cpu_id)
 	if ((mutex_trylock(&module_mutex)))
 	{
 		/* Flush previous TLB mappaing. */
-		__flush_tlb_global();
+		sb_flush_tlb_global();
 
 		sb_check_sw_module_list(cpu_id, NULL);
 		mutex_unlock(&module_mutex);
@@ -417,7 +422,7 @@ void sb_sw_callback_add_task(int cpu_id, struct sb_vm_exit_guest_register* conte
 	}
 
 	/* Flush previous TLB mappaing. */
-	__flush_tlb_global();
+	sb_flush_tlb_global();
 
 	/* Syncronize before introspection. */
 	sb_sync_sw_page((u64)task, sizeof(struct task_struct));
@@ -471,7 +476,7 @@ void sb_sw_callback_del_task(int cpu_id, struct sb_vm_exit_guest_register* conte
 	}
 
 	/* Flush previous TLB mappaing. */
-	__flush_tlb_global();
+	sb_flush_tlb_global();
 
 	if (sw_is_in_task_list(task))
 	{
@@ -629,7 +634,7 @@ void sb_sw_callback_insmod(int cpu_id, struct sb_vm_exit_guest_register* context
 	}
 
 	/* Flush previous TLB mappaing. */
-	__flush_tlb_global();
+	sb_flush_tlb_global();
 
 	/* Get last module information and synchronize before introspection. */
 	mod = (struct module*)context->rdx;
@@ -681,7 +686,7 @@ void sb_sw_callback_rmmod(int cpu_id, struct sb_vm_exit_guest_register* context)
 	}
 
 	/* Flush previous TLB mappaing. */
-	__flush_tlb_global();
+	sb_flush_tlb_global();
 
 	/* Synchronize before introspection. */
 	mod = (struct module*)context->rdi;
@@ -1040,6 +1045,24 @@ static void sb_copy_module_list_to_sw_module_manager(void)
 }
 
 /*
+ * Flush TLB with custom function
+ */
+static void sb_flush_tlb_global(void)
+{
+	u64 cr4;
+
+	if (static_cpu_has(X86_FEATURE_INVPCID))
+	{
+		invpcid_flush_all();
+		return ;
+	}
+
+	cr4 = sb_get_cr4();
+	sb_set_cr4(cr4 ^ X86_CR4_PGE);
+	sb_set_cr4(cr4);
+}
+
+/*
  * Delete the task from task manager.
  */
 static int sb_del_task_from_sw_task_manager(pid_t pid, pid_t tgid)
@@ -1219,7 +1242,10 @@ static int sb_check_sw_file_op_fields(int cpu_id, const struct file_operations* 
 	error |= !sb_is_addr_in_ro_area(op->setlease);
 	error |= !sb_is_addr_in_ro_area(op->fallocate);
 	error |= !sb_is_addr_in_ro_area(op->show_fdinfo);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
+	error |= !sb_is_addr_in_ro_area(op->copy_file_range);
+	error |= !sb_is_addr_in_ro_area(op->remap_file_range);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)
 	error |= !sb_is_addr_in_ro_area(op->copy_file_range);
 	error |= !sb_is_addr_in_ro_area(op->clone_file_range);
 	error |= !sb_is_addr_in_ro_area(op->dedupe_file_range);
@@ -1350,8 +1376,10 @@ static int sb_check_sw_proto_op_fields(int cpu_id, const struct proto_ops* op,
 	error |= !sb_is_addr_in_ro_area(op->shutdown);
 	error |= !sb_is_addr_in_ro_area(op->setsockopt);
 	error |= !sb_is_addr_in_ro_area(op->getsockopt);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 9, 0)
 	error |= !sb_is_addr_in_ro_area(op->compat_setsockopt);
 	error |= !sb_is_addr_in_ro_area(op->compat_getsockopt);
+#endif /* LINUX_VERSION_CODE */
 	error |= !sb_is_addr_in_ro_area(op->sendmsg);
 	error |= !sb_is_addr_in_ro_area(op->recvmsg);
 	error |= !sb_is_addr_in_ro_area(op->mmap);

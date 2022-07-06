@@ -16,7 +16,7 @@
 /*
  * Macros.
  */
-#define SHADOWBOX_VERSION				"2.5.3"
+#define SHADOWBOX_VERSION				"3.1.0"
 
 /* Feature list of Shadow-box. */
 
@@ -26,11 +26,10 @@
 #define SHADOWBOX_USE_HW_BREAKPOINT		1
 #define SHADOWBOX_USE_DESC_TABLE		1
 #define SHADOWBOX_USE_PRE_TIMER			1
-#define SHADOWBOX_USE_PRE_SYMBOL		1
 #define SHADOWBOX_USE_I915_WORKAROUND	1
 #define SHADOWBOX_USE_SLEEP				1
 /* If you want to use tboot, turn on this feature. */
-#define SHADOWBOX_USE_TBOOT				1
+#define SHADOWBOX_USE_TBOOT				0
 
 /* These features are options. */
 #define SHADOWBOX_USE_EXTRA_MODULE_PROTECTION		0
@@ -51,8 +50,6 @@
 #define SHADOWBOX_USE_IOMMU						0
 /* If you want to check module list periodically, turn on this feature. */
 #define SHADOWBOX_USE_PERIODIC_MODULE_CHECK		0
-/* If you want to use code patch workaround, turn on this feature. */
-#define SHADOWBOX_USE_WORKAROUND				0
 #define SHADOWBOX_USE_VPID						0
 
 
@@ -112,7 +109,7 @@
 
 #define MAX_PROCESSOR_COUNT 				256
 #define MAX_RO_ARRAY_COUNT 					4096
-#define MAX_STACK_SIZE						0x800000
+#define MAX_VM_STACK_SIZE					0x800000
 
 #define WORK_AROUND_MAX_COUNT				30
 #define SYMBOL_MAX_COUNT					26
@@ -359,6 +356,7 @@
 /* Secondary processor-based VM execution control flags. */
 #define VM_BIT_VM_SEC_PROC_CTRL_USE_EPT			(0x01 << 1)
 #define VM_BIT_VM_SEC_PROC_CTRL_DESC_TABLE		(0x01 << 2)
+#define VM_BIT_VM_SEC_PROC_CTRL_ENABLE_RDTSCP	(0x01 << 3)
 #define VM_BIT_VM_SEC_PROC_CTRL_ENABLE_VPID		(0x01 << 5)
 #define VM_BIT_VM_SEC_PROC_CTRL_UNREST_GUEST	(0x01 << 7)
 #define VM_BIT_VM_SEC_PROC_CTRL_ENABLE_INVPCID  (0x01 << 12)
@@ -558,9 +556,11 @@
 #define CR3_BIT_PCD								((u64)0x01 << 4)
 
 /* CR4 Flags. */
-#define CR4_BIT_MCE							((u64)0x01 << 6)
+#define CR4_BIT_MCE								((u64)0x01 << 6)
 #define CR4_BIT_VMXE							((u64)0x01 << 13)
 #define CR4_BIT_SMXE							((u64)0x01 << 14)
+#define CR4_BIT_SMEP							((u64)0x01 << 20)
+#define CR4_BIT_SMAP							((u64)0x01 << 21)
 
 /* Shadow-box error codes. */
 #define ERROR_SUCCESS							20008
