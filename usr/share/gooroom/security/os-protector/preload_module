@@ -4,7 +4,7 @@
 modprobe ip_tables
 modprobe iptable_filter
 modprobe xt_owner
-modprobe arc4
+modprobe libarc4
 modprobe ccm
 modprobe ctr
 modprobe rfcomm
