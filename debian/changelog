@@ -1,3 +1,10 @@
+gooroom-os-protector (3.1.0+5.10.120~1+grm3u2) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [0b93bed2] Modified libarc4 in preload_modules
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Fri, 15 Jul 2022 19:17:37 +0900
+
 gooroom-os-protector (3.1.0+5.10.120~1+grm3u1) stable; urgency=medium
 
   [ jongkyung.woo ]
