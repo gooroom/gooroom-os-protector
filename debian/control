@@ -3,8 +3,8 @@ Section: admin
 Priority: optional
 Maintainer: gooroom <gooroom@gooroom.kr>
 Build-Depends: debhelper (>= 9), dkms, nasm, python,
-               linux-image-5.10.0-15-amd64,
-               linux-headers-5.10.0-15-amd64
+               linux-image-5.10.0-17-amd64,
+               linux-headers-5.10.0-17-amd64
 Standards-Version: 3.9.6
 Homepage: http://www.gooroom.kr
 Vcs-Git: https://github.com/gooroom/gooroom-os-protector.git
@@ -12,7 +12,7 @@ Vcs-Browser: https://github.com/gooroom/gooroom-os-protector
 
 Package: gooroom-os-protector
 Architecture: amd64
-Depends: linux-image-5.10.0-15-amd64 (= 5.10.120-1+grm3u2)
+Depends: linux-image-5.10.0-17-amd64 (= 5.10.136-1+grm3u1)
 Description: Gooroom OS Protector
  Gooroom OS Protector protects the Gooroom kernel and drivers.
  It supports Gooroom kernel version from 3.x.x to 5.x.x.
