@@ -1,3 +1,10 @@
+gooroom-os-protector (3.1.0+5.10.136~1+grm3u1) stable; urgency=medium
+
+  [ jongkyung.woo ]
+  * [3ea2707e] Released 5.10.136-1+grm3u1 (5.10.0-17)
+
+ -- Gooroom Autobuilder <jenkins@gooroom.kr>  Tue, 17 Jan 2023 16:24:04 +0900
+
 gooroom-os-protector (3.1.0+5.10.120~1+grm3u3) stable; urgency=medium
 
   [ jongkyung.woo ]
